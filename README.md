@@ -1,5 +1,5 @@
 # Compile
-    make
+	cc server.c -lrt -o server 
 
 # Usage
     webserver <port> <dir>
