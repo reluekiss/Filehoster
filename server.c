@@ -9,6 +9,8 @@
 #include <sys/wait.h>
 #include <netinet/in.h>
 #include <ctype.h>
+#include <sys/types.h>
+#include <dirent.h>
 
 #define ERROR_FILE    0
 #define REG_FILE      1
@@ -22,6 +24,7 @@ void handlePOST(char* buffer, char *web_dir, int *sock);
 
 void extractFileRequest(char *method, char *req, char *buff);
 void handleOpenFile(const char *filepath, int *fileHandle, off_t *file_size);
+void sendFile(int *sock, char *buffer, int *fileHandle, off_t *file_size);
 
 char *mime_type_get(char *filename);
 
@@ -179,7 +182,7 @@ int main(int argc, char **argv) {
                 off_t file_size;
                 char filepath[10];
                 char Header[1024];
-                sprintf(filepath, "%s/%s", webDir, "405.jpg");
+                sprintf(filepath, "%s/%s", webDir, "a/405.jpg");
                 handleOpenFile(filepath, &fileHandle, &file_size);
                 sprintf(Header, "HTTP/1.1 405 Method Not Allowed\r\n"
                                 "Content-type: image/jpg\r\n"
@@ -189,6 +192,7 @@ int main(int argc, char **argv) {
                     perror("Something went wrong writing header.");
                     exit(-1);
                 }
+                sendFile(&newSockFD, buff, &fileHandle, &file_size);
             }
 
             shutdown(newSockFD, 1);
@@ -366,7 +370,7 @@ void handleGET(char *fileToSend, int sock, char *webDir) {
 
     }
     else{
-        sprintf(filepath, "%s/%s", webDir, "404.jpg");
+        sprintf(filepath, "%s/%s", webDir, "a/404.jpg");
         handleOpenFile(filepath, &fileHandle, &file_size);
         sprintf(Header, "HTTP/1.1 404 Not Found\r\n"
                         "Content-type: image/jpg\r\n"
@@ -378,7 +382,6 @@ void handleGET(char *fileToSend, int sock, char *webDir) {
         perror("Something went wrong writing header.");
         exit(-1);
     }
-
 
     sendFile(&sock, buffer, &fileHandle, &file_size);
 }
@@ -430,73 +433,42 @@ char *mime_type_get(char *filename)
 
 /*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
  +
- + Generate a random strinf for a file using urandom.
- +      - Don't forget to free() the generated string.
- +
- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
-char* randString(int length) {
-    char* buffer = malloc(length + 1); // Allocate memory for the string plus null terminator
-    if (!buffer) {
-        perror("Failed to allocate memory");
-        exit(EXIT_FAILURE);
-    }
-
-    int fd = open("/dev/urandom", O_RDONLY); // Open /dev/urandom for reading
-    if (fd == -1) {
-        perror("Failed to open /dev/urandom");
-        free(buffer);
-        exit(EXIT_FAILURE);
-    }
-
-    ssize_t bytesRead = read(fd, buffer, length); // Read bytes from /dev/urandom
-    if (bytesRead!= length) {
-        perror("Failed to read from /dev/urandom");
-        close(fd);
-        free(buffer);
-        exit(EXIT_FAILURE);
-    }
-
-    close(fd); // Close the file descriptor
-
-    buffer[length] = '\0'; // Null terminate the string
-
-    // TODO: Check if file name already exists.
-    //If exists, generate new.
-    
-    return buffer;
-}
-
-/*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
- +
  + Handle a Post request and save the file.
  +
  ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
 void handlePOST(char *buffer, char *web_dir, int *sock) {
-    printf("Method POST was used.");
+    // Parse the Content-Length header to determine the size of the request body
+    int content_length = -1;
+    char content_length_str[10];
+    if (strstr(buffer, "\r\n\r\n") != NULL && strstr(buffer, "Content-Length: ") != NULL) {
+            sscanf(content_length_str, "Content-Length: %d", &content_length);
+    }
+    
+    // Read the request body from the client
+    char body[content_length];
+    if (recv(*sock, body, content_length, 0) <= 0) {
+        // Error or connection closed by client
+        return;
+    }
+
+    // Write a random file name in the image directory.
+    char file_path[512];
+    char file_name[512];
+    
+    snprintf(file_path, sizeof(file_path), "%s/%s.jpg", web_dir, "test.jpg" /*randString(16)*/);
+    FILE *file = fopen(file_path, "w");
+    if (file != NULL) {
+        fwrite(body, 1, content_length, file);
+        fclose(file);
+    }
+   
+    char Header[128];
+    sprintf(Header, "HTTP/1.0 200 OK\r\n"
+                    "Content-type: text/html\r\n"
+                    "Content-length: 66\r\n\r\n");
+    
+    if( write(*sock, Header, strlen(Header)) == -1){
+        perror("Something went wrong writing header.");
+        exit(-1);
+    }
 }
-//    // Parse the Content-Length header to determine the size of the request body
-//    int content_length = -1;
-//    char content_length_str[10];
-//    if (strstr(buffer, "\r\n\r\n") != NULL && strstr(buffer, "Content-Length: ") != NULL) {
-//            sscanf(content_length_str, "Content-Length: %d", &content_length);
-//    }
-//    
-//    // Read the request body from the client
-//    char body[content_length];
-//    if (recv(*sock, body, content_length, 0) <= 0) {
-//        // Error or connection closed by client
-//        return;
-//    }
-//
-//    // Write a random file name in the image directory.
-//    char file_path[512];
-//    char file_name[512];
-//
-//    snprintf(file_path, sizeof(file_path), "%s/", web_dir);
-//    FILE *file = fopen(file_path, "w");
-//    if (file != NULL) {
-//        fwrite(body, 1, content_length, file);
-//        fclose(file);
-//    }
-//    // TODO: Send HTTP reply
-//}
