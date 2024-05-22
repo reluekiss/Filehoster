@@ -346,12 +346,6 @@ void handleGET(char *fileToSend, int sock, char *webDir) {
     else{
         //client requested something other than a environment
     }
-    /*
-     * 1. Send the header (use write())
-     * 2. open the requested file (use open())
-     * 3. now send the requested file (use write())
-     * 4. close the file (use close())
-     */
     
     int fileToSendLength = strlen(fileToSend);
     if(fileToSendLength > 3){
@@ -455,7 +449,7 @@ void handlePOST(char *buffer, char *web_dir, int *sock) {
     char file_path[512];
     char file_name[512];
     
-    snprintf(file_path, sizeof(file_path), "%s/%s.jpg", web_dir, "test.jpg" /*randString(16)*/);
+    snprintf(file_path, sizeof(file_path), "%s/%s.jpg", web_dir, "test" /*randString(16)*/);
     FILE *file = fopen(file_path, "w");
     if (file != NULL) {
         fwrite(body, 1, content_length, file);
