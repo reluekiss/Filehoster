@@ -9,7 +9,6 @@
 #include <sys/wait.h>
 #include <netinet/in.h>
 #include <ctype.h>
-#include <time.h>
 
 #define ERROR_FILE    0
 #define REG_FILE      1
@@ -19,10 +18,10 @@
 int typeOfFile(char *filepath);
 
 void handleGET(char *fileToSend, int sock, char *webDir);
-
-void handlePOST(char *buffer, char *web_dir, int *sock);
+void handlePOST(char* buffer, char *web_dir, int *sock);
 
 void extractFileRequest(char *method, char *req, char *buff);
+void handleOpenFile(const char *filepath, int *fileHandle, off_t *file_size);
 
 char *mime_type_get(char *filename);
 
@@ -168,11 +167,28 @@ int main(int argc, char **argv) {
             printf("client request:\n %s\n", buff);
             extractFileRequest(method, fileRequest, buff);
 
-            if (strcasecmp(method, "POST")) {
-                handlePOST(buffer, webDir, newSockFD);
-            }
-            else { 
+            if (strcmp(method, "GET") == 0) {
+                printf("%s", method);
                 handleGET(fileRequest, newSockFD, webDir);
+            }
+            else if (strcmp(method, "POST") == 0) { 
+                handlePOST(buff, webDir, &newSockFD);
+            }
+            else {
+                int fileHandle;
+                off_t file_size;
+                char filepath[10];
+                char Header[1024];
+                sprintf(filepath, "%s/%s", webDir, "405.jpg");
+                handleOpenFile(filepath, &fileHandle, &file_size);
+                sprintf(Header, "HTTP/1.1 405 Method Not Allowed\r\n"
+                                "Content-type: image/jpg\r\n"
+                                "Content-length: %ld\r\n\r\n", file_size);
+                //send header
+                if( write(newSockFD, Header, strlen(Header)) == -1){
+                    perror("Something went wrong writing header.");
+                    exit(-1);
+                }
             }
 
             shutdown(newSockFD, 1);
@@ -223,24 +239,20 @@ int typeOfFile(char *filepath) {
  + 
  +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
 void extractFileRequest(char *method, char *req, char *buff) {
-    int i = 0;
-    int j = 0;
-    while(buff[j] <= 5){
-        method[i] = buff[j];
-        i++;
-        j++;
-    }
-    method[i] = '\0';
+  size_t method_len = strcspn(buff, " ");
+  strncpy(method, buff, method_len);
+  method[method_len] = '\0';
 
-    i = 0;
-    j = 6;
-    while(buff[j] <= 32){
-        req[i] = buff[j];
-        i++;
-        j++;
-    }
-    req[i] = '\0';
-    return;
+  // Skip over whitespace between the method and requested file.
+  size_t i = method_len;
+  while (isspace(buff[i])) {
+    i++;
+  }
+
+  // Find the end of the requested file.
+  size_t req_len = strcspn(buff + i, " ");
+  strncpy(req, buff + i, req_len);
+  req[req_len] = '\0';
 }
 
 /*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -460,29 +472,31 @@ char* randString(int length) {
  +
  ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
 void handlePOST(char *buffer, char *web_dir, int *sock) {
-    // Parse the Content-Length header to determine the size of the request body
-    int content_length = -1;
-    char content_length_str[10];
-    if (strstr(buffer, "\r\n\r\n") != NULL && strstr(buffer, "Content-Length: ") != NULL) {
-            sscanf(content_length_str, "Content-Length: %d", &content_length);
-    }
-    
-    // Read the request body from the client
-    char body[content_length];
-    if (recv(*sock, body, content_length, 0) <= 0) {
-        // Error or connection closed by client
-        return;
-    }
-
-    // Write a random file name in the image directory.
-    char file_path[512];
-    char file_name[512];
-
-    snprintf(file_path, sizeof(file_path), "%s/", web_dir);
-    FILE *file = fopen(file_path, "w");
-    if (file != NULL) {
-        fwrite(body, 1, content_length, file);
-        fclose(file);
-    }
-    // TODO: Send HTTP reply
+    printf("Method POST was used.");
 }
+//    // Parse the Content-Length header to determine the size of the request body
+//    int content_length = -1;
+//    char content_length_str[10];
+//    if (strstr(buffer, "\r\n\r\n") != NULL && strstr(buffer, "Content-Length: ") != NULL) {
+//            sscanf(content_length_str, "Content-Length: %d", &content_length);
+//    }
+//    
+//    // Read the request body from the client
+//    char body[content_length];
+//    if (recv(*sock, body, content_length, 0) <= 0) {
+//        // Error or connection closed by client
+//        return;
+//    }
+//
+//    // Write a random file name in the image directory.
+//    char file_path[512];
+//    char file_name[512];
+//
+//    snprintf(file_path, sizeof(file_path), "%s/", web_dir);
+//    FILE *file = fopen(file_path, "w");
+//    if (file != NULL) {
+//        fwrite(body, 1, content_length, file);
+//        fclose(file);
+//    }
+//    // TODO: Send HTTP reply
+//}
