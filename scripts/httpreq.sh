@@ -1,3 +1,3 @@
 #!/bin/bash
-curl -X POST localhost:2002 -f file test.txt
-curl -X GET localhost:2002
+size=$(stat -c%s $1)
+curl -X POST http://localhost:2002 -H 'Content-Type: multipart/form-data' -H 'Content-Length: '$size -H 'Content-Disposition: form-data; name="file"; filename="'$1'"'  -T $1 
