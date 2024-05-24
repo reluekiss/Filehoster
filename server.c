@@ -149,6 +149,7 @@ void foured(int id, char* webDir, int* sock, char* buff) {
         exit(-1);
     }
     sendFile(sock, buff, &fileHandle, &file_size);
+    printf("\nResponse:\n%s\n", Header);
 }
 
 /*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -216,7 +217,6 @@ void handleGET(char *fileToSend, int sock, char *webDir, char *buff) {
     char *mime;
     
     printf("File Requested: |%s|\n", fileToSend);
-    fflush(stdout);
 
     // Build the full path to the file
     sprintf(filepath, "%s%s", webDir, fileToSend);
@@ -228,23 +228,24 @@ void handleGET(char *fileToSend, int sock, char *webDir, char *buff) {
 
     fileType = typeOfFile(filepath);
     // TODO: fix this to work with webDir (= public)
-    if(fileType == DIRECTORY && strcmp(filepath, "public/") == 0) {
+    if(strcmp(filepath, "public/") == 0) {
         sprintf(filepath, "%s%s", filepath, "index.html");
     }
-    else if (fileType == REG_FILE) {
-        // Do nothing
+    else if (fileType == DIRECTORY) {
+        foured(400, webDir, &sock, buff);
+        return;
     }
     else {
-        foured(400, webDir, &sock, buff);
+        // Do nothing.
     }
     int fileExist = 1;
     handleOpenFile(filepath, &fileHandle, &file_size, &fileExist);
-    if(fileExist == 1 && fileType == DIRECTORY || fileType == REG_FILE){        
+    if(fileExist == 1 && fileType == REG_FILE){        
         mime = mime_type_get(filepath);
         sprintf(Header, "HTTP/1.0 200 OK\r\n"
                         "Content-Type: %s\r\n"
                         "Content-length: %ld\r\n\r\n", mime, file_size);
-        printf("\nHeader: %s\n", Header);        
+        printf("\nServer response:\n%s\nfilename: %s", Header, filepath);        
         if( write(sock, Header, strlen(Header)) == -1){
             perror("Something went wrong writing header.");
             exit(-1);
@@ -352,6 +353,7 @@ void handlePOST(char *buffer, char *filename, int *sock, char *web_dir) {
     off_t file_size;
     handleOpenFile(filepath, &fd, &file_size, &fileExist);
     sendFile(sock, buffer, &fd, &file_size);
+    printf("\nServer response:\n%s\nfilename: %s", Header, filepath);        
 }
 
 /*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -492,6 +494,7 @@ int main(int argc, char **argv) {
 
             shutdown(newSockFD, 1);
             close(newSockFD);
+            fflush(stdout);
             exit(0);
         } // pid = 0
         else {
