@@ -111,6 +111,11 @@ void sendFile(int *sock, char *buffer, int *fileHandle, off_t *file_size) {
     close(*fileHandle);
 }
 
+/*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ +
+ + Handle various erroneous http requests. 
+ +
+ ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
 void foured(int id, char* webDir, int* sock, char* buff) {
     int fileHandle;
     int fileExist = 1;
@@ -302,7 +307,7 @@ void handlePOST(char *buffer, char *filename, int *sock, char *web_dir) {
     int data_size = sizeof(data);
     fwrite(data, data_size, content_length, file);
     
-    // TODO: sends broken pipe ie doesn't continue looping and breaks as EOF even though it isn't?
+    // TODO: sends broken pipe ie doesn't continue looping and breaks as EOF even though it isn't? (was working before :] )
     // Write any more data that isn't in the buffer.
     size_t remaining_bytes = content_length - data_size;
     int bytes_received;
@@ -340,6 +345,13 @@ void handlePOST(char *buffer, char *filename, int *sock, char *web_dir) {
         perror("Something went wrong writing header.");
         exit(-1);
     }
+    
+    // Send back the uploaded file.
+    int fileExist;
+    int fd;
+    off_t file_size;
+    handleOpenFile(filepath, &fd, &file_size, &fileExist);
+    sendFile(sock, buffer, &fd, &file_size);
 }
 
 /*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
