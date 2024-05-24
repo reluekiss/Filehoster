@@ -305,7 +305,7 @@ void handleGET(char *fileToSend, int sock, char *webDir) {
     fflush(stdout);
 
     // Build the full path to the file
-    sprintf(filepath, "%s/%s", webDir, fileToSend);
+    sprintf(filepath, "%s%s", webDir, fileToSend);
 
     /*
      * - If the requested file is a environment (directory), append 'index.html'
