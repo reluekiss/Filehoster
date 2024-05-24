@@ -443,7 +443,8 @@ void handlePOST(char *buffer, char *filename, int *sock, char *web_dir) {
     char Header[128];
     sprintf(Header, "HTTP/1.0 200 OK\r\n"
                     "Content-type: text/html\r\n"
-                   "Content-length: 66\r\n\r\n");
+                    "Content-length: 100\r\n\r\n"
+                    "Your file is on this domain at %s", filepath);
     
     if( write(*sock, Header, strlen(Header)) == -1){
         perror("Something went wrong writing header.");
