@@ -20,16 +20,290 @@
 #define DEFAULT_MIME_TYPE "application/octet-stream"
 #define MIN(x, y) ((x) < (y) ? (x) : (y))
 
-int typeOfFile(char *filepath);
 
-void handleGET(char *fileToSend, int sock, char *webDir);
-void handlePOST(char *buffer, char *filename, int *sock, char *web_dir);
+/*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ +
+ +  Function: typeOfFile()
+ +  Description: Tells us if the request is a environment or a regular file
+ + 
+ +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+int typeOfFile(char *filepath) {
+    struct stat buf;    /* to stat the file/dir */
 
-void extractFileRequest(char *method, char *req, char *buff);
-void handleOpenFile(const char *filepath, int *fileHandle, off_t *file_size); 
-void sendFile(int *sock, char *buffer, int *fileHandle, off_t *file_size);
+    if (stat(filepath, &buf) != 0) {
+        perror("Failed to identify specified file");
+        fprintf(stderr, "[ERROR] stat() on file: |%s|\n", filepath);
+        fflush(stderr);
+        return (ERROR_FILE);
+    }
 
-char *mime_type_get(char *filename);
+    printf("File full path: %s, file length is %li bytes\n", filepath, buf.st_size);
+
+    if (S_ISREG(buf.st_mode))
+        return (REG_FILE);
+    else if (S_ISDIR(buf.st_mode))
+        return (DIRECTORY);
+
+    return (ERROR_FILE);
+}
+
+/*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ +
+ + Function: extractFileRequest()
+ + Description:  Extract the file request from the request lines the client
+ +               sent to us.  Make sure you NULL terminate your result.
+ + 
+ +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+void extractFileRequest(char *method, char *req, char *buff) {
+  size_t method_len = strcspn(buff, " ");
+  strncpy(method, buff, method_len);
+  method[method_len] = '\0';
+
+  // Skip over whitespace between the method and requested file.
+  size_t i = method_len;
+  while (isspace(buff[i])) {
+    i++;
+  }
+
+  // Find the end of the requested file.
+  size_t req_len = strcspn(buff + i, " ");
+  strncpy(req, buff + i, req_len);
+  req[req_len] = '\0';
+}
+
+/*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ +
+ + Open a file and handle size calculations.
+ +
+ ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+void handleOpenFile(const char *filepath, int *fileHandle, off_t *file_size) {
+    if ((*fileHandle = open(filepath, O_RDONLY)) == -1) {
+        fprintf(stderr, "File does not exist: %s\n", filepath);
+    }
+
+    *file_size = lseek(*fileHandle, (off_t)0, SEEK_END);
+    lseek(*fileHandle, (off_t)0, SEEK_SET);
+}
+
+/*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ +
+ +  Function: send/receiveFile()
+ +  Description: Send/receive the requested file.
+ + 
+ +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+void sendFile(int *sock, char *buffer, int *fileHandle, off_t *file_size) {
+    ssize_t s;
+    int sendbuffer = 0;
+
+    while(sendbuffer <= *file_size) {
+        sendbuffer = sendbuffer + 1024;
+        //read file
+        if((s = read(*fileHandle, buffer, 1024)) == -1){
+            perror("Something went wrong reading to buffer.");
+            exit(-1);
+        }
+        //send file
+        if((write(*sock, buffer, s)) == -1){
+            perror("Something went wrong writing file.");
+            exit(-1);
+        }
+    }
+    close(*fileHandle);
+}
+
+void foured(int id, char* webDir, int* sock, char* buff) {
+    int fileHandle;
+    off_t file_size;
+    char filepath[10];
+    char Header[1024];
+    sprintf(filepath, "%s/a/%d.jpg", webDir, id);
+    handleOpenFile(filepath, &fileHandle, &file_size);
+
+    // TODO: can make similar hashmap for this as to mime types.
+    char *idnames[] = {
+        "Bad Request",
+        "Not Found",
+        "Method not allowed"
+    };
+    int ids[] = {400, 404, 405};
+    int size = sizeof(ids) / sizeof(ids[0]);
+    int i = 0;
+    for (;i < size; i++) {
+        if (ids[i] == id) {
+            break; // Return the index of the matching element
+        }
+    }
+
+    sprintf(Header, "HTTP/1.1 %d %s\r\n"
+                    "Content-type: image/jpg\r\n"
+                    "Content-length: %ld\r\n\r\n", id, idnames[i], file_size);
+    //Send header.
+    if( write(*sock, Header, strlen(Header)) == -1){
+        perror("Something went wrong writing header.");
+        exit(-1);
+    }
+    sendFile(sock, buff, &fileHandle, &file_size);
+}
+
+/*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ +
+ + Return a MIME type for a given filename
+ +
+ ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+char *mime_type_get(char *filename) {
+    char *ext = strrchr(filename, '.');
+
+    if (ext == NULL) {
+        return DEFAULT_MIME_TYPE;
+    }
+    
+    for (char *p = ext; *p != '\0'; p++) {
+        *p = tolower(*p);
+    }
+
+    // TODO: this is O(n) and it should be O(1) (Current attempt in wip/mimehash.c)
+
+    if (strcmp(ext, "html") == 0 || strcmp(ext, "htm") == 0) { return "text/html"; }
+    if (strcmp(ext, "jpeg") == 0 || strcmp(ext, "jpg") == 0) { return "image/jpg"; }
+    if (strcmp(ext, "css") == 0) { return "text/css"; }
+    if (strcmp(ext, "js") == 0) { return "application/javascript"; }
+    if (strcmp(ext, "json") == 0) { return "application/json"; }
+    if (strcmp(ext, "txt") == 0) { return "text/plain"; }
+    if (strcmp(ext, "gif") == 0) { return "image/gif"; }
+    if (strcmp(ext, "png") == 0) { return "image/png"; }
+
+    return DEFAULT_MIME_TYPE;
+}
+
+/*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ +
+ +  Function: handleGET()
+ +  Description: Send the requested file.
+ + 
+ +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+void handleGET(char *fileToSend, int sock, char *webDir, char *buff) {
+    char filepath[256];
+    char Header[1024];
+    char buffer[1024];
+    off_t file_size;
+    int fileHandle;
+    int fileType;
+    char *mime;
+    
+    printf("File Requested: |%s|\n", fileToSend);
+    fflush(stdout);
+
+    // Build the full path to the file
+    sprintf(filepath, "%s%s", webDir, fileToSend);
+
+    /*
+     * If the requested file is a environment (directory), append 'index.html'
+     * file to the end of the filepath
+     */
+
+    fileType = typeOfFile(filepath);
+
+    if(fileType == DIRECTORY && strcmp(filepath,"/") != 0) {
+        foured(400, webDir, &sock, buff);
+    }
+    else {
+        sprintf(filepath, "%s%s", filepath, "index.html");
+    }
+
+    
+    if(fileType == DIRECTORY || fileType == REG_FILE){        
+        handleOpenFile(filepath, &fileHandle, &file_size);
+        mime = mime_type_get(filepath);
+        sprintf(Header, "HTTP/1.0 200 OK\r\n"
+                        "Content-type: %s\r\n"
+                        "Content-length: %ld\r\n\r\n", mime, file_size);
+    }
+    else{
+        foured(404, webDir, &sock, buff);
+    }
+
+    sendFile(&sock, buffer, &fileHandle, &file_size);
+}
+
+/*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ +
+ + Handle a Post request and save the file.
+ +
+ ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+void handlePOST(char *buffer, char *filename, int *sock, char *web_dir) {
+    int i,j = 0;
+    // Parse the Content-Length header to determine the size of the request body.
+    char *content_length_str = strstr(buffer, "Content-Length: ") + 16;
+    long content_length = atoi(strstr(content_length_str, "\r\n") ? content_length_str : strstr(content_length_str, "\n"));
+    
+    // Create a random file name for the uploaded file in the data directory.
+    char *ext = strrchr(filename, '.');
+    if (ext == NULL) {
+        ext = ".txt";
+    }
+    char filepath[2048];
+    char *s = malloc(17);
+    snprintf(filepath, 2048, "%s/data/%s%s", web_dir, randString(web_dir, s, 16), ext);
+    if (strlen(filepath) >= 2048) {
+        printf("Error: file path too long\n");
+        return;
+    }
+    
+    // Parse the body of the request. 
+    char *start = strstr(buffer, "\r\n\r\n") + 4;
+    char *data = malloc(strlen(start) + 1);
+    memmove(data, start, strlen(start));
+    data[strlen(start)] = '\0';
+    
+    // Open the file to write to.
+    FILE *file;
+    file = fopen(filepath, "wb");
+    if (file == NULL) {
+        printf("Failed to open %s\n", filepath);
+    }
+    // Write the request body from the buffer.
+    int data_size = sizeof(data);
+    fwrite(data, data_size, content_length, file);
+    
+    // Write any more data that isn't in the buffer.
+    size_t remaining_bytes = content_length - data_size;
+    int bytes_received;
+    int wbuffer[8192];
+    while (remaining_bytes > 0) {
+        if((bytes_received = read(*sock, wbuffer, MIN(8192, remaining_bytes)) == -1)) {
+            perror("Something went wrong reading to buffer.");
+            exit(-1);
+        }
+        if (bytes_received == 0) {
+            printf("hi");
+            break; // EOF
+        }
+        if (bytes_received < 0) {
+            perror("Error reading from socket.");
+            break;
+        }
+        if(fwrite(wbuffer, 1, bytes_received, file) == -1) {
+            perror("Something went wrong writing file.");
+            exit(-1);
+        }
+        remaining_bytes -= bytes_received;
+    }
+
+    fclose(file);
+    free(data);
+    
+    // Send back a header.
+    char Header[128];
+    sprintf(Header, "HTTP/1.0 200 OK\r\n"
+                    "Content-type: text/html\r\n"
+                    "Content-length: 100\r\n\r\n"
+                    "Your file is on this domain at %s", strstr(filepath, web_dir) + strlen(web_dir));
+    
+    if( write(*sock, Header, strlen(Header)) == -1){
+        perror("Something went wrong writing header.");
+        exit(-1);
+    }
+}
 
 /*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
  +
@@ -154,31 +428,17 @@ int main(int argc, char **argv) {
             memmove(buff, ref, 1024);
             
             // Extract user requested file name.
-            //printf("client request:\n %s\n", ref);
+            printf("client request:\n %s\n", ref);
             
             extractFileRequest(method, fileRequest, buff);
             if (strcmp(method, "GET") == 0) {
-                handleGET(fileRequest, newSockFD, webDir);
+                handleGET(fileRequest, newSockFD, webDir, buff);
             }
             else if (strcmp(method, "POST") == 0) { 
                 handlePOST(buff, fileRequest, &newSockFD, webDir);
             }
             else {
-                int fileHandle;
-                off_t file_size;
-                char filepath[10];
-                char Header[1024];
-                sprintf(filepath, "%s/%s", webDir, "a/405.jpg");
-                handleOpenFile(filepath, &fileHandle, &file_size);
-                sprintf(Header, "HTTP/1.1 405 Method Not Allowed\r\n"
-                                "Content-type: image/jpg\r\n"
-                                "Content-length: %ld\r\n\r\n", file_size);
-                //Send header.
-                if( write(newSockFD, Header, strlen(Header)) == -1){
-                    perror("Something went wrong writing header.");
-                    exit(-1);
-                }
-                sendFile(&newSockFD, buff, &fileHandle, &file_size);
+                foured(405, webDir, &newSockFD, buff);
             }
 
             shutdown(newSockFD, 1);
@@ -195,259 +455,3 @@ int main(int argc, char **argv) {
     }
 }
 
-/*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
- +
- +  Function: typeOfFile()
- +  Description: Tells us if the request is a environment or a regular file
- + 
- +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
-int typeOfFile(char *filepath) {
-    struct stat buf;    /* to stat the file/dir */
-
-    if (stat(filepath, &buf) != 0) {
-        perror("Failed to identify specified file");
-        fprintf(stderr, "[ERROR] stat() on file: |%s|\n", filepath);
-        fflush(stderr);
-        return (ERROR_FILE);
-    }
-
-    printf("File full path: %s, file length is %li bytes\n", filepath, buf.st_size);
-
-    if (S_ISREG(buf.st_mode))
-        return (REG_FILE);
-    else if (S_ISDIR(buf.st_mode))
-        return (DIRECTORY);
-
-    return (ERROR_FILE);
-}
-
-/*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
- +
- + Function: extractFileRequest()
- + Description:  Extract the file request from the request lines the client
- +               sent to us.  Make sure you NULL terminate your result.
- + 
- +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
-void extractFileRequest(char *method, char *req, char *buff) {
-  size_t method_len = strcspn(buff, " ");
-  strncpy(method, buff, method_len);
-  method[method_len] = '\0';
-
-  // Skip over whitespace between the method and requested file.
-  size_t i = method_len;
-  while (isspace(buff[i])) {
-    i++;
-  }
-
-  // Find the end of the requested file.
-  size_t req_len = strcspn(buff + i, " ");
-  strncpy(req, buff + i, req_len);
-  req[req_len] = '\0';
-}
-
-/*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
- +
- + Open a file and handle size calculations.
- +
- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
-void handleOpenFile(const char *filepath, int *fileHandle, off_t *file_size) {
-    if ((*fileHandle = open(filepath, O_RDONLY)) == -1) {
-        fprintf(stderr, "File does not exist: %s\n", filepath);
-    }
-
-    *file_size = lseek(*fileHandle, (off_t)0, SEEK_END);
-    lseek(*fileHandle, (off_t)0, SEEK_SET);
-}
-
-/*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
- +
- +  Function: send/receiveFile()
- +  Description: Send/receive the requested file.
- + 
- +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
-void sendFile(int *sock, char *buffer, int *fileHandle, off_t *file_size) {
-    ssize_t s;
-    int sendbuffer = 0;
-
-    while(sendbuffer <= *file_size) {
-        sendbuffer = sendbuffer + 1024;
-        //read file
-        if((s = read(*fileHandle, buffer, 1024)) == -1){
-            perror("Something went wrong reading to buffer.");
-            exit(-1);
-        }
-        //send file
-        if((write(*sock, buffer, s)) == -1){
-            perror("Something went wrong writing file.");
-            exit(-1);
-        }
-    }
-    close(*fileHandle);
-}
-
-/*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
- +
- +  Function: handleGET()
- +  Description: Send the requested file.
- + 
- +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
-void handleGET(char *fileToSend, int sock, char *webDir) {
-    char filepath[256];
-    char Header[1024];
-    char buffer[1024];
-    off_t file_size;
-    int fileHandle;
-    int fileType;
-    char *extension;
-    char *mime;
-    
-    printf("File Requested: |%s|\n", fileToSend);
-    fflush(stdout);
-
-    // Build the full path to the file
-    sprintf(filepath, "%s%s", webDir, fileToSend);
-
-    /*
-     * - If the requested file is a environment (directory), append 'index.html'
-     *   file to the end of the filepath
-     * - If the requested file is a regular file, do nothing and proceed
-     */
-
-    fileType = typeOfFile(filepath);
-
-    if(fileType == DIRECTORY){
-        sprintf(filepath, "%s%s", filepath, "index.html");
-    }
-    
-    int fileToSendLength = strlen(fileToSend);
-    if(fileToSendLength > 3){
-        extension = &fileToSend[strlen(fileToSend) - 3];
-    }
-    else
-        extension = "html";
-
-    if(fileType == DIRECTORY || fileType == REG_FILE){        
-        handleOpenFile(filepath, &fileHandle, &file_size);
-        mime = mime_type_get(filepath);
-        sprintf(Header, "HTTP/1.0 200 OK\r\n"
-                        "Content-type: %s\r\n"
-                        "Content-length: %ld\r\n\r\n", mime, file_size);
-    }
-    else{
-        sprintf(filepath, "%s/%s", webDir, "a/404.jpg");
-        handleOpenFile(filepath, &fileHandle, &file_size);
-        sprintf(Header, "HTTP/1.1 404 Not Found\r\n"
-                        "Content-type: image/jpg\r\n"
-                        "Content-length: %ld\r\n\r\n", file_size);
-    }
-     //send header
-    if( write(sock, Header, strlen(Header)) == -1){
-        perror("Something went wrong writing header.");
-        exit(-1);
-    }
-
-    sendFile(&sock, buffer, &fileHandle, &file_size);
-}
-
-/*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
- +
- + Return a MIME type for a given filename
- +
- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
-char *mime_type_get(char *filename) {
-    char *ext = strrchr(filename, '.');
-
-    if (ext == NULL) {
-        return DEFAULT_MIME_TYPE;
-    }
-    
-    for (char *p = ext; *p != '\0'; p++) {
-        *p = tolower(*p);
-    }
-
-    // TODO: this is O(n) and it should be O(1) (Current attempt in wip/mimehash.c)
-
-    if (strcmp(ext, "html") == 0 || strcmp(ext, "htm") == 0) { return "text/html"; }
-    if (strcmp(ext, "jpeg") == 0 || strcmp(ext, "jpg") == 0) { return "image/jpg"; }
-    if (strcmp(ext, "css") == 0) { return "text/css"; }
-    if (strcmp(ext, "js") == 0) { return "application/javascript"; }
-    if (strcmp(ext, "json") == 0) { return "application/json"; }
-    if (strcmp(ext, "txt") == 0) { return "text/plain"; }
-    if (strcmp(ext, "gif") == 0) { return "image/gif"; }
-    if (strcmp(ext, "png") == 0) { return "image/png"; }
-
-    return DEFAULT_MIME_TYPE;
-}
-
-/*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
- +
- + Handle a Post request and save the file.
- +
- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
-void handlePOST(char *buffer, char *filename, int *sock, char *web_dir) {
-    int i,j = 0;
-    // Parse the Content-Length header to determine the size of the request body.
-    char *content_length_str = strstr(buffer, "Content-Length: ") + 16;
-    long content_length = atoi(strstr(content_length_str, "\r\n") ? content_length_str : strstr(content_length_str, "\n"));
-    
-    // Create a random file name for the uploaded file in the data directory.
-    char *ext = strrchr(filename, '.');
-    if (ext == NULL) {
-        ext = ".txt";
-    }
-    char filepath[2048];
-    char *s = malloc(17);
-    snprintf(filepath, 2048, "%sdata/%s%s", web_dir, randString(web_dir, s, 16), ext);
-    if (strlen(filepath) >= 2048) {
-        printf("Error: file path too long\n");
-        return;
-    }
-    
-    // Parse the body of the request. 
-    char *start = strstr(buffer, "\r\n\r\n") + 4;
-    char *data = malloc(strlen(start) + 1);
-    memmove(data, start, strlen(start));
-    data[strlen(start)] = '\0';
-    
-    // Open the file to write to.
-    FILE *file;
-    file = fopen(filepath, "wb");
-    if (file == NULL) {
-        printf("Failed to open %s\n", filepath);
-    }
-    // Write the request body from the buffer.
-    int data_size = sizeof(data);
-    fwrite(data, data_size, content_length, file);
-    
-    // Write any more data that isn't in the buffer.
-    size_t remaining_bytes = content_length - data_size;
-    int bytes_received;
-    int wbuffer[8192];
-    while (remaining_bytes > 0) {
-        bytes_received = read(*sock, wbuffer, MIN(8192, remaining_bytes));
-        if (bytes_received == 0) {
-            break; // EOF
-        }
-        if (bytes_received < 0) {
-            perror("Error reading from socket.");
-            break;
-        }
-        fwrite(wbuffer, 1, bytes_received, file);
-        remaining_bytes -= bytes_received;
-    }
-
-    fclose(file);
-    free(data);
-    
-    // Send back a header.
-    char Header[128];
-    sprintf(Header, "HTTP/1.0 200 OK\r\n"
-                    "Content-type: text/html\r\n"
-                    "Content-length: 100\r\n\r\n"
-                    "Your file is on this domain at %s", filepath);
-    
-    if( write(*sock, Header, strlen(Header)) == -1){
-        perror("Something went wrong writing header.");
-        exit(-1);
-    }
-}
