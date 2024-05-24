@@ -228,7 +228,7 @@ void handleGET(char *fileToSend, int sock, char *webDir, char *buff) {
 
     fileType = typeOfFile(filepath);
     // TODO: fix this to work with webDir (= public)
-    if(strcmp(filepath, "public/") == 0) {
+    if(fileType == DIRECTORY && strcmp(filepath, "public/") == 0) {
         sprintf(filepath, "%s%s", filepath, "index.html");
     }
     else if (fileType == DIRECTORY) {
