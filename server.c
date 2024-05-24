@@ -3,6 +3,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <sys/socket.h>
+#include <time.h>
 #include <unistd.h>
 #include <string.h>
 #include <stdlib.h>
@@ -153,7 +154,7 @@ int main(int argc, char **argv) {
             memmove(buff, ref, 1024);
             
             // Extract user requested file name.
-            printf("client request:\n %s\n", ref);
+            //printf("client request:\n %s\n", ref);
             
             extractFileRequest(method, fileRequest, buff);
             if (strcmp(method, "GET") == 0) {
@@ -391,6 +392,9 @@ void handlePOST(char *buffer, char *filename, int *sock, char *web_dir) {
     
     // Write a random file name in the image directory.
     char *ext = strrchr(filename, '.');
+    if (ext == NULL) {
+        ext = ".txt";
+    }
     char filepath[2048];
     char *s = malloc(17);
     char img_dir[512]; 
