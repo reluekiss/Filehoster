@@ -228,7 +228,7 @@ void handleGET(char *fileToSend, int sock, char *webDir, char *buff) {
 
     fileType = typeOfFile(filepath);
     // TODO: fix this to work with webDir (= public)
-    if(fileType == DIRECTORY && strcmp(filepath, "public/") == 0) {
+    if(strcmp(filepath, "public/") == 0) {
         sprintf(filepath, "%s%s", filepath, "index.html");
     }
     else if (fileType == DIRECTORY) {
@@ -240,7 +240,7 @@ void handleGET(char *fileToSend, int sock, char *webDir, char *buff) {
     }
     int fileExist = 1;
     handleOpenFile(filepath, &fileHandle, &file_size, &fileExist);
-    if(fileExist == 1 && fileType == REG_FILE){        
+    if(fileExist == 1){        
         mime = mime_type_get(filepath);
         sprintf(Header, "HTTP/1.0 200 OK\r\n"
                         "Content-Type: %s\r\n"
