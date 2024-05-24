@@ -12,7 +12,6 @@
 #include <ctype.h>
 #include <sys/types.h>
 #include <dirent.h>
-#include "randString.h"
 
 #define ERROR_FILE    0
 #define REG_FILE      1
@@ -76,9 +75,10 @@ void extractFileRequest(char *method, char *req, char *buff) {
  + Open a file and handle size calculations.
  +
  ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
-void handleOpenFile(const char *filepath, int *fileHandle, off_t *file_size) {
+void handleOpenFile(const char *filepath, int *fileHandle, off_t *file_size, int *fileExist) {
     if ((*fileHandle = open(filepath, O_RDONLY)) == -1) {
         fprintf(stderr, "File does not exist: %s\n", filepath);
+        *fileExist = 0;
     }
 
     *file_size = lseek(*fileHandle, (off_t)0, SEEK_END);
@@ -113,11 +113,12 @@ void sendFile(int *sock, char *buffer, int *fileHandle, off_t *file_size) {
 
 void foured(int id, char* webDir, int* sock, char* buff) {
     int fileHandle;
+    int fileExist = 1;
     off_t file_size;
     char filepath[10];
     char Header[1024];
     sprintf(filepath, "%s/a/%d.jpg", webDir, id);
-    handleOpenFile(filepath, &fileHandle, &file_size);
+    handleOpenFile(filepath, &fileHandle, &file_size, &fileExist);
 
     // TODO: can make similar hashmap for this as to mime types.
     char *idnames[] = {
@@ -151,8 +152,7 @@ void foured(int id, char* webDir, int* sock, char* buff) {
  +
  ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
 char *mime_type_get(char *filename) {
-    char *ext = strrchr(filename, '.');
-
+    char *ext = strrchr(filename, '.')+1;
     if (ext == NULL) {
         return DEFAULT_MIME_TYPE;
     }
@@ -173,6 +173,26 @@ char *mime_type_get(char *filename) {
     if (strcmp(ext, "png") == 0) { return "image/png"; }
 
     return DEFAULT_MIME_TYPE;
+}
+
+/*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ +
+ + Generate a random string for a file using urandom.
+ +      - Don't forget to free() the generated string.
+ +
+ ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+char* randString(char* webdir, char *s, int len) {
+    const char *chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    int i, n;
+
+    srand(time(NULL));
+    for (i = 0; i < len; i++) {
+        n = rand() % (int)(strlen(chars) - 1);
+        s[i] = chars[n];
+    }
+    s[len] = '\0';
+    
+    return s; 
 }
 
 /*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -202,27 +222,33 @@ void handleGET(char *fileToSend, int sock, char *webDir, char *buff) {
      */
 
     fileType = typeOfFile(filepath);
-
-    if(fileType == DIRECTORY && strcmp(filepath,"/") != 0) {
-        foured(400, webDir, &sock, buff);
-    }
-    else {
+    // TODO: fix this to work with webDir (= public)
+    if(fileType == DIRECTORY && strcmp(filepath, "public/") == 0) {
         sprintf(filepath, "%s%s", filepath, "index.html");
     }
-
-    
-    if(fileType == DIRECTORY || fileType == REG_FILE){        
-        handleOpenFile(filepath, &fileHandle, &file_size);
+    else if (fileType == REG_FILE) {
+        // Do nothing
+    }
+    else {
+        foured(400, webDir, &sock, buff);
+    }
+    int fileExist = 1;
+    handleOpenFile(filepath, &fileHandle, &file_size, &fileExist);
+    if(fileExist == 1 && fileType == DIRECTORY || fileType == REG_FILE){        
         mime = mime_type_get(filepath);
         sprintf(Header, "HTTP/1.0 200 OK\r\n"
-                        "Content-type: %s\r\n"
+                        "Content-Type: %s\r\n"
                         "Content-length: %ld\r\n\r\n", mime, file_size);
+        printf("\nHeader: %s\n", Header);        
+        if( write(sock, Header, strlen(Header)) == -1){
+            perror("Something went wrong writing header.");
+            exit(-1);
+        }
+        sendFile(&sock, buffer, &fileHandle, &file_size);
     }
     else{
         foured(404, webDir, &sock, buff);
     }
-
-    sendFile(&sock, buffer, &fileHandle, &file_size);
 }
 
 /*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -233,6 +259,7 @@ void handleGET(char *fileToSend, int sock, char *webDir, char *buff) {
 void handlePOST(char *buffer, char *filename, int *sock, char *web_dir) {
     int i,j = 0;
     // Parse the Content-Length header to determine the size of the request body.
+    filename = strstr(buffer, "upfile=") + 7;
     char *content_length_str = strstr(buffer, "Content-Length: ") + 16;
     long content_length = atoi(strstr(content_length_str, "\r\n") ? content_length_str : strstr(content_length_str, "\n"));
     
@@ -241,14 +268,24 @@ void handlePOST(char *buffer, char *filename, int *sock, char *web_dir) {
     if (ext == NULL) {
         ext = ".txt";
     }
+    
     char filepath[2048];
     char *s = malloc(17);
-    snprintf(filepath, 2048, "%s/data/%s%s", web_dir, randString(web_dir, s, 16), ext);
-    if (strlen(filepath) >= 2048) {
-        printf("Error: file path too long\n");
-        return;
+    while (1) {
+        snprintf(filepath, 2048, "%s/data/%s%s", web_dir, randString(web_dir, s, 16), ext);
+        
+        // Check if requested filename exists.
+        int fd, fileExist;
+        if ((fd = open(filepath, O_RDONLY)) == -1) {
+            fileExist = 0;
+            break;
+            close(fd);
+        }
+        else {
+            fileExist = 1;
+            close(fd);
+        }
     }
-    
     // Parse the body of the request. 
     char *start = strstr(buffer, "\r\n\r\n") + 4;
     char *data = malloc(strlen(start) + 1);
@@ -265,6 +302,7 @@ void handlePOST(char *buffer, char *filename, int *sock, char *web_dir) {
     int data_size = sizeof(data);
     fwrite(data, data_size, content_length, file);
     
+    // TODO: sends broken pipe ie doesn't continue looping and breaks as EOF even though it isn't?
     // Write any more data that isn't in the buffer.
     size_t remaining_bytes = content_length - data_size;
     int bytes_received;
@@ -275,7 +313,6 @@ void handlePOST(char *buffer, char *filename, int *sock, char *web_dir) {
             exit(-1);
         }
         if (bytes_received == 0) {
-            printf("hi");
             break; // EOF
         }
         if (bytes_received < 0) {
