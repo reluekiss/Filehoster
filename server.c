@@ -390,15 +390,13 @@ void handlePOST(char *buffer, char *filename, int *sock, char *web_dir) {
     char *content_length_str = strstr(buffer, "Content-Length: ") + 16;
     long content_length = atoi(strstr(content_length_str, "\r\n") ? content_length_str : strstr(content_length_str, "\n"));
     
-    // Write a random file name in the image directory.
+    // Create a random file name for the uploaded file in the data directory.
     char *ext = strrchr(filename, '.');
     if (ext == NULL) {
         ext = ".txt";
     }
     char filepath[2048];
     char *s = malloc(17);
-    char img_dir[512]; 
-    sprintf(img_dir, "%s/a", web_dir);
     snprintf(filepath, 2048, "%sdata/%s%s", web_dir, randString(web_dir, s, 16), ext);
     if (strlen(filepath) >= 2048) {
         printf("Error: file path too long\n");
@@ -406,7 +404,7 @@ void handlePOST(char *buffer, char *filename, int *sock, char *web_dir) {
     }
     
     // Parse the body of the request. 
-    char *start = strstr(buffer, "\r\n\r\n");
+    char *start = strstr(buffer, "\r\n\r\n") + 4;
     char *data = malloc(strlen(start) + 1);
     memmove(data, start, strlen(start));
     data[strlen(start)] = '\0';
@@ -426,12 +424,11 @@ void handlePOST(char *buffer, char *filename, int *sock, char *web_dir) {
     int bytes_received;
     int wbuffer[8192];
     while (remaining_bytes > 0) {
-        printf("hi");
         bytes_received = read(*sock, wbuffer, MIN(8192, remaining_bytes));
         if (bytes_received == 0) {
             break; // EOF
         }
-        else if (bytes_received < 0) {
+        if (bytes_received < 0) {
             perror("Error reading from socket.");
             break;
         }
