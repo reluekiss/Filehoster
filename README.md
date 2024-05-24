@@ -1,5 +1,5 @@
 # Compile
-	cc server.c -lrt -o server 
+    cc -o server server.c randString.c
 
 # Usage
     webserver <port> <dir>

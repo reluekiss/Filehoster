@@ -1,7 +1,3 @@
-/*
- * Currently segfaults, I'm not sure why.
- */
-
 #include <stdio.h>
 #include <strings.h>
 #include <sys/stat.h>
@@ -14,7 +10,7 @@
 #include <netinet/in.h>
 #include <sys/types.h>
 #include <dirent.h>
-
+#include <time.h>
 /*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 +
 + Binary Search
@@ -70,46 +66,30 @@ char** fileList(char *dir) {
  +      - Don't forget to free() the generated string.
  +
  ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
-char* randString(int length) {
-    char* buffer = malloc(length + 1); // Allocate memory for the string plus null terminator
-    if (!buffer) {
-        perror("Failed to allocate memory");
-        exit(EXIT_FAILURE);
-    }
+char* randString(char* webdir, char *s, int len) {
+    const char *chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    int i, n;
 
-    int fd = open("/dev/urandom", O_RDONLY); // Open /dev/urandom for reading
-    if (fd == -1) {
-        perror("Failed to open /dev/urandom");
-        free(buffer);
-        exit(EXIT_FAILURE);
+    srand(time(NULL));
+    for (i = 0; i < len; i++) {
+        n = rand() % (int)(strlen(chars) - 1);
+        s[i] = chars[n];
     }
+    s[len] = '\0';
 
-    ssize_t bytesRead = read(fd, buffer, length); // Read bytes from /dev/urandom
-    if (bytesRead!= length) {
-        perror("Failed to read from /dev/urandom");
-        close(fd);
-        free(buffer);
-        exit(EXIT_FAILURE);
+    // Check if filename exists.
+    char** filenames = fileList(webdir);
+    if (binarySearch(filenames, 0, 4096, s) == 1) {
+        for(int i = 0; i < 4096; i++) {
+            free(filenames[i]);
+        }
+        free(filenames);
+        return randString(webdir, s, len);
     }
     
-    close(fd); // Close the file descriptor
-    
-    buffer[length] = '\0'; // Null terminate the string
-    char** filenames = fileList("a");
-    if (binarySearch(filenames, 0, 4096, buffer) == 1) {
-	return buffer;
-    }
-
-    free(buffer);
     for(int i = 0; i < 4096; i++) {
         free(filenames[i]);
     }
     free(filenames);
-    return randString(length);
-}
-
-int main() {
-	for (int i = 0;i <= 10; i++){
-		printf("%s", randString(12));
-	}
+    return s; 
 }

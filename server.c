@@ -11,6 +11,7 @@
 #include <ctype.h>
 #include <sys/types.h>
 #include <dirent.h>
+#include "randString.h"
 
 #define ERROR_FILE    0
 #define REG_FILE      1
@@ -391,7 +392,10 @@ void handlePOST(char *buffer, char *filename, int *sock, char *web_dir) {
     // Write a random file name in the image directory.
     char *ext = strrchr(filename, '.');
     char filepath[2048];
-    snprintf(filepath, 2048, "%sdata/%s", web_dir, filename /*randString(16), ext*/);
+    char *s = malloc(17);
+    char img_dir[512]; 
+    sprintf(img_dir, "%s/a", web_dir);
+    snprintf(filepath, 2048, "%sdata/%s%s", web_dir, randString(web_dir, s, 16), ext);
     if (strlen(filepath) >= 2048) {
         printf("Error: file path too long\n");
         return;
@@ -418,6 +422,7 @@ void handlePOST(char *buffer, char *filename, int *sock, char *web_dir) {
     int bytes_received;
     int wbuffer[8192];
     while (remaining_bytes > 0) {
+        printf("hi");
         bytes_received = read(*sock, wbuffer, MIN(8192, remaining_bytes));
         if (bytes_received == 0) {
             break; // EOF
