@@ -23,31 +23,12 @@
 <form  method="POST" class="flex-col">
   <table id="postForm">
     <tbody>
-      <tr data-type="Author">
-        <td>Author (optional)</td>
-        <td>
-          <input
-            id="author"
-            name="author"
-            type="text"
-            tabindex="1"
-            placeholder="Anonymous"
-          />
-          <input type="submit" value="Post" tabindex="10" />
-        </td>
-      </tr>
-      <tr data-type="body">
-        <td>Body</td>
-        <td>
-          <textarea id="body" name="body" cols="48" rows="4" wrap="soft" tabindex="4"
-          ></textarea>
-        </td>
-      </tr>
       <tr data-type="file">
         <td>File</td>
         <td>
           <input id="postFile" name="upfile" type="file" tabindex="8" />
-        </td>
+          <input type="submit" value="Post" tabindex="10" />
+	</td>
       </tr>
     </tbody>
   </table>

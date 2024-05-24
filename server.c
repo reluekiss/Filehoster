@@ -45,18 +45,12 @@ int main(int argc, char **argv) {
 
     socklen_t clientAddressLength;
 
-
-    /*
-     * structs used for bind, accept..
-     */
+    // Struct used for bind and accept.
     struct sockaddr_in serverAddress, clientAddress;
 
     char fileRequest[256];    /* where we store the requested file name */
-
-    /*
-
-     * Check for correct program inputs.
-     */
+    
+    // Check for correct program inputs.
     if (argc != 3) {
         fprintf(stderr, "USAGE: %s <port number> <website directory>\n", argv[0]);
         exit(-1);
@@ -83,7 +77,7 @@ int main(int argc, char **argv) {
     /*
      * Create our socket, bind it, listen.
      * This socket will be used for communication
-     * between the client and this server
+     * between the client and this server.
      */
 
     //Create
@@ -134,7 +128,7 @@ int main(int argc, char **argv) {
             exit(0);
         }
 
-        /* Forking off a new process to handle a new connection */
+        // Forking off a new process to handle a new connection.
         if ((pid = fork()) < 0) {
             perror("Failed to fork a child process");
             exit(0);
@@ -251,7 +245,7 @@ void extractFileRequest(char *method, char *req, char *buff) {
 
 /*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
  +
- + Open a file and handle length and header calculations.
+ + Open a file and handle size calculations.
  +
  ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
 void handleOpenFile(const char *filepath, int *fileHandle, off_t *file_size) {
@@ -273,7 +267,7 @@ void sendFile(int *sock, char *buffer, int *fileHandle, off_t *file_size) {
     ssize_t s;
     int sendbuffer = 0;
 
-    do{
+    while(sendbuffer <= *file_size) {
         sendbuffer = sendbuffer + 1024;
         //read file
         if((s = read(*fileHandle, buffer, 1024)) == -1){
@@ -286,8 +280,6 @@ void sendFile(int *sock, char *buffer, int *fileHandle, off_t *file_size) {
             exit(-1);
         }
     }
-    while(sendbuffer <= *file_size);
-
     close(*fileHandle);
 }
 
@@ -371,7 +363,7 @@ char *mime_type_get(char *filename) {
         *p = tolower(*p);
     }
 
-    // TODO: this is O(n) and it should be O(1) (Current attempt in mimehash.c)
+    // TODO: this is O(n) and it should be O(1) (Current attempt in wip/mimehash.c)
 
     if (strcmp(ext, "html") == 0 || strcmp(ext, "htm") == 0) { return "text/html"; }
     if (strcmp(ext, "jpeg") == 0 || strcmp(ext, "jpg") == 0) { return "image/jpg"; }
@@ -404,14 +396,13 @@ void handlePOST(char *buffer, char *filename, int *sock, char *web_dir) {
         printf("Error: file path too long\n");
         return;
     }
-    //printf("%s%ld", filepath, content_length);
+    
     // Parse the body of the request. 
     char *start = strstr(buffer, "\r\n\r\n");
     char *data = malloc(strlen(start) + 1);
     memmove(data, start, strlen(start));
     data[strlen(start)] = '\0';
     
-    int data_size = sizeof(data);
     // Open the file to write to.
     FILE *file;
     file = fopen(filepath, "wb");
@@ -419,6 +410,7 @@ void handlePOST(char *buffer, char *filename, int *sock, char *web_dir) {
         printf("Failed to open %s\n", filepath);
     }
     // Write the request body from the buffer.
+    int data_size = sizeof(data);
     fwrite(data, data_size, content_length, file);
     
     // Write any more data that isn't in the buffer.
@@ -432,6 +424,7 @@ void handlePOST(char *buffer, char *filename, int *sock, char *web_dir) {
         }
         else if (bytes_received < 0) {
             perror("Error reading from socket.");
+            break;
         }
         fwrite(wbuffer, 1, bytes_received, file);
         remaining_bytes -= bytes_received;
