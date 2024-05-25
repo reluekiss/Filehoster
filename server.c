@@ -54,20 +54,18 @@ int typeOfFile(char *filepath) {
  + 
  +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
 void extractFileRequest(char *method, char *req, char *buff) {
-  size_t method_len = strcspn(buff, " ");
-  strncpy(method, buff, method_len);
-  method[method_len] = '\0';
+    char* p = buff;
+    char* end = strchr(p, '/'); // find the first slash
+    size_t method_len = end - p;
+    strncpy(method, p, method_len-1);
+    method[method_len] = '\0';
 
-  // Skip over whitespace between the method and requested file.
-  size_t i = method_len;
-  while (isspace(buff[i])) {
-    i++;
-  }
-
-  // Find the end of the requested file.
-  size_t req_len = strcspn(buff + i, " ");
-  strncpy(req, buff + i, req_len);
-  req[req_len] = '\0';
+    // Find the name of the requested file.
+    char* start = end; // take the start of the request to be the start
+    end = strchr(start, ' '); // find the terminating space
+    size_t req_len = end - start;
+    strncpy(req, start, req_len);
+    req[req_len] = '\0';
 }
 
 /*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -217,18 +215,15 @@ void handleGET(char *fileToSend, int sock, char *webDir, char *buff) {
     char *mime;
     
     printf("File Requested: |%s|\n", fileToSend);
-
     // Build the full path to the file
     sprintf(filepath, "%s%s", webDir, fileToSend);
-
     /*
      * If the requested file is a environment (directory), append 'index.html'
      * file to the end of the filepath
      */
 
     fileType = typeOfFile(filepath);
-    // TODO: fix this to work with webDir (= public)
-    if(strcmp(filepath, "public/") == 0) {
+    if(strcmp(fileToSend, "/") == 0) {
         sprintf(filepath, "%s%s", filepath, "index.html");
     }
     else if (fileType == DIRECTORY) {
@@ -238,6 +233,7 @@ void handleGET(char *fileToSend, int sock, char *webDir, char *buff) {
     else {
         // Do nothing.
     }
+
     int fileExist = 1;
     handleOpenFile(filepath, &fileHandle, &file_size, &fileExist);
     if(fileExist == 1){        
@@ -265,7 +261,13 @@ void handleGET(char *fileToSend, int sock, char *webDir, char *buff) {
 void handlePOST(char *buffer, char *filename, int *sock, char *web_dir) {
     int i,j = 0;
     // Parse the Content-Length header to determine the size of the request body.
-    filename = strstr(buffer, "upfile=") + 7;
+    printf("inside function");
+    if (strcmp(filename, "/") != 0) { 
+        filename = strstr(buffer, "upfile=") + 7;
+    }
+
+    printf("\nnew filename:\n%s\n", filename);
+
     char *content_length_str = strstr(buffer, "Content-Length: ") + 16;
     long content_length = atoi(strstr(content_length_str, "\r\n") ? content_length_str : strstr(content_length_str, "\n"));
     
@@ -306,24 +308,25 @@ void handlePOST(char *buffer, char *filename, int *sock, char *web_dir) {
     }
     // Write the request body from the buffer.
     int data_size = sizeof(data);
-    fwrite(data, data_size, content_length, file);
+    if(fwrite(data, data_size, content_length, file) == -1) {
+        perror("Something went wrong writing file.");
+        exit(-1);
+    }
     
     // TODO: sends broken pipe ie doesn't continue looping and breaks as EOF even though it isn't? (was working before :] )
     // Write any more data that isn't in the buffer.
     size_t remaining_bytes = content_length - data_size;
-    int bytes_received;
-    int wbuffer[8192];
+    int bytes_received = 1024;
+    int wbuffer[1024];
+    printf("%ld", remaining_bytes);
     while (remaining_bytes > 0) {
-        if((bytes_received = read(*sock, wbuffer, MIN(8192, remaining_bytes)) == -1)) {
-            perror("Something went wrong reading to buffer.");
+        if((bytes_received = read(*sock, wbuffer, MIN(1024, remaining_bytes)) == -1)) {
+            perror("Something went wrong reading from socket.");
             exit(-1);
         }
+        printf("%s", buffer);
         if (bytes_received == 0) {
             break; // EOF
-        }
-        if (bytes_received < 0) {
-            perror("Error reading from socket.");
-            break;
         }
         if(fwrite(wbuffer, 1, bytes_received, file) == -1) {
             perror("Something went wrong writing file.");
@@ -342,7 +345,7 @@ void handlePOST(char *buffer, char *filename, int *sock, char *web_dir) {
                     "Content-length: 100\r\n\r\n"
                     "Your file is on this domain at %s", strstr(filepath, web_dir) + strlen(web_dir));
     
-    if( write(*sock, Header, strlen(Header)) == -1){
+    if(write(*sock, Header, strlen(Header)) == -1){
         perror("Something went wrong writing header.");
         exit(-1);
     }
@@ -353,7 +356,7 @@ void handlePOST(char *buffer, char *filename, int *sock, char *web_dir) {
     off_t file_size;
     handleOpenFile(filepath, &fd, &file_size, &fileExist);
     sendFile(sock, buffer, &fd, &file_size);
-    printf("\nServer response:\n%s\nfilename: %s", Header, filepath);        
+    printf("\nServer response:\n%s\n", Header);        
 }
 
 /*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -482,15 +485,21 @@ int main(int argc, char **argv) {
             printf("client request:\n %s\n", ref);
             
             extractFileRequest(method, fileRequest, buff);
+            printf("\n\n\nbefore if %d\n\n\n", strcmp(method, "POST"));
+            // TODO: WHAT THE FUCK IS THIS?????
             if (strcmp(method, "GET") == 0) {
+                printf("in GET branch");
                 handleGET(fileRequest, newSockFD, webDir, buff);
             }
             else if (strcmp(method, "POST") == 0) { 
+                printf("in POST branch");
                 handlePOST(buff, fileRequest, &newSockFD, webDir);
             }
             else {
+                printf("in 405 branch");
                 foured(405, webDir, &newSockFD, buff);
             }
+            printf("out of if");
 
             shutdown(newSockFD, 1);
             close(newSockFD);
