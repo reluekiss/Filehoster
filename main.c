@@ -265,33 +265,23 @@ void handlePOST(char *buffer, int *sock, char *web_dir) {
     memmove(form, start, strlen(start));
     form[strlen(start)] = '\0';
     
-    printf("\nform:\n %s\n", form);
-
-    start = strstr(buffer, "\r\n\r\n") + 4;
+    start = strstr(form, "\r\n\r\n") + 4;
     char *data = malloc(strlen(start) + 1);
     memmove(data, start, strlen(start));
     data[strlen(start)] = '\0';
     
-    printf("\ndata:\n %s\n", data);
-    
-    // Send back a header.
-    char Header[128];
-    sprintf(Header, "HTTP/1.0 200 OK\r\n"
-                    "Content-type: text/html\r\n"
-                    "Content-length: 100\r\n\r\n");
-   //                 "Your file is on this domain at %s", strstr(filepath, web_dir) + strlen(web_dir));
-    
-    if(write(*sock, Header, strlen(Header)) == -1){
-        perror("Something went wrong writing header.");
-        exit(-1);
-    }
-    printf("\nServer response:\n%s\n", Header);        
-    
+    char* filenameStart = strstr(data, "filename=\"") + 10;
+    char* filenameEnd = strstr(filenameStart, "\"");
+    size_t filenameLength = filenameEnd - filenameStart;
+    char filename[filenameLength + 1];
+    strncpy(filename, filenameStart, filenameLength);
+    filename[filenameLength] = '\0';
+
     // Parse the Content-Length header to determine the size of the request body.
-    char* filename = strstr(data, "filename=\"") + 10;
-    
     char *content_length_str = strstr(buffer, "Content-Length: ") + 16;
     long content_length = atoi(strstr(content_length_str, "\r\n") ? content_length_str : strstr(content_length_str, "\n"));
+    content_length = content_length - sizeof(form);
+    free(form);
     
     // Create a random file name for the uploaded file in the data directory.
     char *ext = strrchr(filename, '.');
@@ -336,6 +326,19 @@ void handlePOST(char *buffer, int *sock, char *web_dir) {
     
     // Write any more data that isn't in the buffer.
     sendFile(&file, buffer, sock, &content_length);
+    
+    // Send back a header.
+    char Header[128];
+    sprintf(Header, "HTTP/1.0 200 OK\r\n"
+                    "Content-type: text/html\r\n"
+                    "Content-length: 100\r\n\r\n"
+                    "Your file is on this domain at %s", strstr(filepath, web_dir) + strlen(web_dir));
+    
+    if(write(*sock, Header, strlen(Header)) == -1){
+        perror("Something went wrong writing header.");
+        exit(-1);
+    }
+    printf("\nServer response:\n%s\n", Header);        
     
     // Send back the uploaded file.
     int fd;
