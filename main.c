@@ -89,14 +89,15 @@ void handleOpenFile(const char *filepath, int *fileHandle, off_t *file_size, int
  +  Description: Send/receive the requested file.
  + 
  +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
-void sendFile(int *sock, char *buffer, int *fileHandle, off_t *file_size) {
+void sendFile(int *sock, char *buffer, int *fd, off_t *file_size) {
     ssize_t s;
     int sendbuffer = 0;
+    memset(buffer, 0, sizeof(*buffer));
 
     while(sendbuffer <= *file_size) {
         sendbuffer = sendbuffer + 1024;
         //read file
-        if((s = read(*fileHandle, buffer, 1024)) == -1){
+        if((s = read(*fd, buffer, 1024)) == -1){
             perror("Something went wrong reading to buffer.");
             exit(-1);
         }
@@ -106,7 +107,7 @@ void sendFile(int *sock, char *buffer, int *fileHandle, off_t *file_size) {
             exit(-1);
         }
     }
-    close(*fileHandle);
+    close(*fd);
 }
 
 /*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -181,7 +182,7 @@ char *mime_type_get(char *filename) {
 
 /*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
  +
- + Generate a random string for a file using urandom.
+ + Generate a random string for a file.
  +      - Don't forget to free() the generated string.
  +
  ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
@@ -217,11 +218,8 @@ void handleGET(char *fileToSend, int sock, char *webDir, char *buff) {
     printf("File Requested: |%s|\n", fileToSend);
     // Build the full path to the file
     sprintf(filepath, "%s%s", webDir, fileToSend);
-    /*
-     * If the requested file is a environment (directory), append 'index.html'
-     * file to the end of the filepath
-     */
 
+    // If the requested file is a environment (directory), append 'index.html' file to the end of the filepath
     fileType = typeOfFile(filepath);
     if(strcmp(fileToSend, "/") == 0) {
         sprintf(filepath, "%s%s", filepath, "index.html");
@@ -241,7 +239,7 @@ void handleGET(char *fileToSend, int sock, char *webDir, char *buff) {
         sprintf(Header, "HTTP/1.0 200 OK\r\n"
                         "Content-Type: %s\r\n"
                         "Content-length: %ld\r\n\r\n", mime, file_size);
-        printf("\nServer response:\n%s\nfilename: %s", Header, filepath);        
+        printf("\nServer response:\n%s\nfilename: %s\n", Header, filepath);        
         if( write(sock, Header, strlen(Header)) == -1){
             perror("Something went wrong writing header.");
             exit(-1);
@@ -258,16 +256,40 @@ void handleGET(char *fileToSend, int sock, char *webDir, char *buff) {
  + Handle a Post request and save the file.
  +
  ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
-void handlePOST(char *buffer, char *filename, int *sock, char *web_dir) {
+void handlePOST(char *buffer, int *sock, char *web_dir) {
     int i,j = 0;
-    // Parse the Content-Length header to determine the size of the request body.
-    printf("inside function");
-    if (strcmp(filename, "/") != 0) { 
-        filename = strstr(buffer, "upfile=") + 7;
+    
+    // Parse the body of the request. 
+    char *start = strstr(buffer, "\r\n\r\n") + 4;
+    char *form = malloc(strlen(start) + 1);
+    memmove(form, start, strlen(start));
+    form[strlen(start)] = '\0';
+    
+    printf("\nform:\n %s\n", form);
+
+    start = strstr(buffer, "\r\n\r\n") + 4;
+    char *data = malloc(strlen(start) + 1);
+    memmove(data, start, strlen(start));
+    data[strlen(start)] = '\0';
+    
+    printf("\ndata:\n %s\n", data);
+    
+    // Send back a header.
+    char Header[128];
+    sprintf(Header, "HTTP/1.0 200 OK\r\n"
+                    "Content-type: text/html\r\n"
+                    "Content-length: 100\r\n\r\n");
+   //                 "Your file is on this domain at %s", strstr(filepath, web_dir) + strlen(web_dir));
+    
+    if(write(*sock, Header, strlen(Header)) == -1){
+        perror("Something went wrong writing header.");
+        exit(-1);
     }
-
-    printf("\nnew filename:\n%s\n", filename);
-
+    printf("\nServer response:\n%s\n", Header);        
+    
+    // Parse the Content-Length header to determine the size of the request body.
+    char* filename = strstr(data, "filename=\"") + 10;
+    
     char *content_length_str = strstr(buffer, "Content-Length: ") + 16;
     long content_length = atoi(strstr(content_length_str, "\r\n") ? content_length_str : strstr(content_length_str, "\n"));
     
@@ -279,11 +301,13 @@ void handlePOST(char *buffer, char *filename, int *sock, char *web_dir) {
     
     char filepath[2048];
     char *s = malloc(17);
+    int fileExist;
     while (1) {
         snprintf(filepath, 2048, "%s/data/%s%s", web_dir, randString(web_dir, s, 16), ext);
         
-        // Check if requested filename exists.
-        int fd, fileExist;
+        // Check if requested filename exists. 
+        // TODO: create hash table of all file names to check against
+        int fd;
         if ((fd = open(filepath, O_RDONLY)) == -1) {
             fileExist = 0;
             break;
@@ -294,69 +318,30 @@ void handlePOST(char *buffer, char *filename, int *sock, char *web_dir) {
             close(fd);
         }
     }
-    // Parse the body of the request. 
-    char *start = strstr(buffer, "\r\n\r\n") + 4;
-    char *data = malloc(strlen(start) + 1);
-    memmove(data, start, strlen(start));
-    data[strlen(start)] = '\0';
     
     // Open the file to write to.
-    FILE *file;
-    file = fopen(filepath, "wb");
-    if (file == NULL) {
-        printf("Failed to open %s\n", filepath);
-    }
-    // Write the request body from the buffer.
-    int data_size = sizeof(data);
-    if(fwrite(data, data_size, content_length, file) == -1) {
-        perror("Something went wrong writing file.");
+    int file;
+    if ((file = open(filepath, O_RDWR | O_CREAT, 0644)) == -1) {
+        perror("Error initialising file to write to.");
         exit(-1);
     }
+    printf("\nnew filepath: %s\n", filepath);
     
-    // TODO: sends broken pipe ie doesn't continue looping and breaks as EOF even though it isn't? (was working before :] )
-    // Write any more data that isn't in the buffer.
-    size_t remaining_bytes = content_length - data_size;
-    int bytes_received = 1024;
-    int wbuffer[1024];
-    printf("%ld", remaining_bytes);
-    while (remaining_bytes > 0) {
-        if((bytes_received = read(*sock, wbuffer, MIN(1024, remaining_bytes)) == -1)) {
-            perror("Something went wrong reading from socket.");
-            exit(-1);
-        }
-        printf("%s", buffer);
-        if (bytes_received == 0) {
-            break; // EOF
-        }
-        if(fwrite(wbuffer, 1, bytes_received, file) == -1) {
-            perror("Something went wrong writing file.");
-            exit(-1);
-        }
-        remaining_bytes -= bytes_received;
+    // Write the request body from the buffer.
+    if(write(file, data, sizeof(data)) == -1) {
+        perror("Something went wrong writing initial buffer to file.");
+        exit(-1);
     }
-
-    fclose(file);
     free(data);
     
-    // Send back a header.
-    char Header[128];
-    sprintf(Header, "HTTP/1.0 200 OK\r\n"
-                    "Content-type: text/html\r\n"
-                    "Content-length: 100\r\n\r\n"
-                    "Your file is on this domain at %s", strstr(filepath, web_dir) + strlen(web_dir));
-    
-    if(write(*sock, Header, strlen(Header)) == -1){
-        perror("Something went wrong writing header.");
-        exit(-1);
-    }
+    // Write any more data that isn't in the buffer.
+    sendFile(&file, buffer, sock, &content_length);
     
     // Send back the uploaded file.
-    int fileExist;
     int fd;
     off_t file_size;
     handleOpenFile(filepath, &fd, &file_size, &fileExist);
     sendFile(sock, buffer, &fd, &file_size);
-    printf("\nServer response:\n%s\n", Header);        
 }
 
 /*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -366,19 +351,19 @@ void handlePOST(char *buffer, char *filename, int *sock, char *web_dir) {
  + 
  +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
 int main(int argc, char **argv) {
-    pid_t pid;            /* pid of child */
-    int sockFD;           /* our initial socket */
+    pid_t pid;
+    int sockFD;
 
     int newSockFD;
-    int port;             /* Port number, used by 'bind' */
-    char webDir[128];    /* Your environment that contains your web webDir*/
+    int port;
+    char webDir[128];
 
     socklen_t clientAddressLength;
 
     // Struct used for bind and accept.
     struct sockaddr_in serverAddress, clientAddress;
 
-    char fileRequest[256];    /* where we store the requested file name */
+    char fileRequest[256];
     
     // Check for correct program inputs.
     if (argc != 3) {
@@ -386,36 +371,27 @@ int main(int argc, char **argv) {
         exit(-1);
     }
 
-    port = atoi(argv[1]);       /* Get the port number */
-    strcpy(webDir, argv[2]);    /* Get user specified web content directory */
-
+    port = atoi(argv[1]);
+    strcpy(webDir, argv[2]);
 
     if ((pid = fork()) < 0) {
         perror("Cannot fork (for deamon)");
         exit(0);
     }
     else if (pid != 0) {
-        /*
-         * I am the parent
-         */
-        char t[128];
-        sprintf(t, "echo %d > %s.pid\n", pid, argv[0]);
-        system(t);
+        // I am the parent
+        printf("Parent pid: %d", pid);
         exit(0);
     }
 
-    /*
-     * Create our socket, bind it, listen.
-     * This socket will be used for communication
-     * between the client and this server.
-     */
+    // Create our socket, bind it, listen.
 
-    //Create
+    // Create
     if((sockFD = socket(AF_INET, SOCK_STREAM, 0)) == -1){
         perror("something went wrong at creating our socket.");
         exit(0);
     }
-    //Bind
+    // Bind
     serverAddress.sin_family = AF_INET; /* Internet domain */
     serverAddress.sin_addr.s_addr = INADDR_ANY; /* local machine IP address */
     serverAddress.sin_port = htons(port);
@@ -423,19 +399,16 @@ int main(int argc, char **argv) {
         perror("something went wrong at binding socket.");
         exit(0);
     }
-    //Listen
+    // Listen
     int backlog = 5;
     if((listen(sockFD,backlog)) == -1){
         perror("something went wrong at listening.");
         exit(0);
     }
 
-    signal(SIGCHLD, SIG_IGN);  /* Prevent zombie processes */
+    // Prevent zombie processes
+    signal(SIGCHLD, SIG_IGN);  
 
-    /*
-     * Get the size of the clientAddress structure, could pass NULL if we
-     * don't care about who the client is.
-     */
     clientAddressLength = sizeof(clientAddress);
 
     /*
@@ -447,12 +420,7 @@ int main(int argc, char **argv) {
 
     while (1) {
 
-        /*
-         * Accept a connection from a client (a web browser)
-         * accept the new connection. newSockFD will be used for the
-         * child to communicate to the client (browser)
-         */
-
+        // Accept new connection
         if((newSockFD = accept(sockFD, (struct sockaddr *) &clientAddress, &clientAddressLength)) == -1){
             perror("something went wrong at accepting a connection");
             exit(0);
@@ -464,9 +432,7 @@ int main(int argc, char **argv) {
             exit(0);
         }
         else if (pid == 0) {
-            /*
-             * I am the child
-             */
+            // I am the child
             char buff[1024];
             char ref[1024];
             char method[10];
@@ -474,32 +440,26 @@ int main(int argc, char **argv) {
             close(sockFD);
             memset(buff, 0, 1024);
             memset(ref, 0, 1024);
-
+            
             // Read client request into buff.
             if(read(newSockFD, ref, 1024) == -1){
                 perror("something went wrong reading client request");
             }
             memmove(buff, ref, 1024);
             
-            // Extract user requested file name.
             printf("client request:\n %s\n", ref);
             
+            // Extract user requested file name.
             extractFileRequest(method, fileRequest, buff);
-            printf("\n\n\nbefore if %d\n\n\n", strcmp(method, "POST"));
-            // TODO: WHAT THE FUCK IS THIS?????
             if (strcmp(method, "GET") == 0) {
-                printf("in GET branch");
                 handleGET(fileRequest, newSockFD, webDir, buff);
             }
             else if (strcmp(method, "POST") == 0) { 
-                printf("in POST branch");
-                handlePOST(buff, fileRequest, &newSockFD, webDir);
+                handlePOST(buff, &newSockFD, webDir);
             }
             else {
-                printf("in 405 branch");
                 foured(405, webDir, &newSockFD, buff);
             }
-            printf("out of if");
 
             shutdown(newSockFD, 1);
             close(newSockFD);
@@ -507,11 +467,8 @@ int main(int argc, char **argv) {
             exit(0);
         } // pid = 0
         else {
-            /*
-             * I am the Parent
-             */
-            close(newSockFD);    /* Parent handed off this connection to its child,
-			                        doesn't care about this socket */
+            // Parent handed off this connection to its child.
+            close(newSockFD);    
         }
     }
 }
