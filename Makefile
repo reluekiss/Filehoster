@@ -1,11 +1,11 @@
 all: server
 
+start:
+	./server 2003 public
+
 clean:
 	@rm -rf *.o
 	@rm -rf server
-
-start:
-	./server 2002 public
 
 server: main.o
 	gcc -o server $^

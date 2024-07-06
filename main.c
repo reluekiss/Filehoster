@@ -17,6 +17,7 @@
 #define REG_FILE      1
 #define DIRECTORY     2
 #define DEFAULT_MIME_TYPE "application/octet-stream"
+#define FILESIZEMAX 200000000
 #define MIN(x, y) ((x) < (y) ? (x) : (y))
 
 
@@ -36,7 +37,7 @@ int typeOfFile(char *filepath) {
         return (ERROR_FILE);
     }
 
-    printf("File full path: %s, file length is %li bytes\n", filepath, buf.st_size);
+    printf("file path: %s, filesize: %li bytes\n", filepath, buf.st_size);
 
     if (S_ISREG(buf.st_mode))
         return (REG_FILE);
@@ -107,7 +108,6 @@ void sendFile(int *sock, char *buffer, int *fd, off_t *file_size) {
             exit(-1);
         }
     }
-    close(*fd);
 }
 
 /*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -127,10 +127,12 @@ void foured(int id, char* webDir, int* sock, char* buff) {
     // TODO: can make similar hashmap for this as to mime types.
     char *idnames[] = {
         "Bad Request",
+        "Forbidden",
         "Not Found",
         "Method not allowed"
+        "Internal server error"
     };
-    int ids[] = {400, 404, 405};
+    int ids[] = {400, 403, 404, 405, 500};
     int size = sizeof(ids) / sizeof(ids[0]);
     int i = 0;
     for (;i < size; i++) {
@@ -148,6 +150,7 @@ void foured(int id, char* webDir, int* sock, char* buff) {
         exit(-1);
     }
     sendFile(sock, buff, &fileHandle, &file_size);
+    close(fileHandle);
     printf("\nResponse:\n%s\n", Header);
 }
 
@@ -240,15 +243,29 @@ void handleGET(char *fileToSend, int sock, char *webDir, char *buff) {
                         "Content-Type: %s\r\n"
                         "Content-length: %ld\r\n\r\n", mime, file_size);
         printf("\nServer response:\n%s\nfilename: %s\n", Header, filepath);        
+        
         if( write(sock, Header, strlen(Header)) == -1){
             perror("Something went wrong writing header.");
             exit(-1);
         }
         sendFile(&sock, buffer, &fileHandle, &file_size);
+        close(fileHandle);
     }
     else{
         foured(404, webDir, &sock, buff);
     }
+}
+// Function to return a substring given a start and end substrings. Remember to free() the returned value.
+char* startend(char* data, char* start, char* end) {
+    char* Start = strstr(data, start) + 10;
+    char* End = strstr(Start, end);
+    size_t Length = End ? End - Start : 0;
+    char* name = (char *)malloc(Length + 2);
+    if(!name)
+        return NULL;
+    strncpy(name, Start, Length);
+    name[Length] = '\0';
+    return name;
 }
 
 /*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -266,37 +283,37 @@ void handlePOST(char *buffer, int *sock, char *web_dir) {
     form[strlen(start)] = '\0';
     
     start = strstr(form, "\r\n\r\n") + 4;
+    free(form);
     char *data = malloc(strlen(start) + 1);
     memmove(data, start, strlen(start));
     data[strlen(start)] = '\0';
     
-    char* filenameStart = strstr(data, "filename=\"") + 10;
-    char* filenameEnd = strstr(filenameStart, "\"");
-    size_t filenameLength = filenameEnd - filenameStart;
-    char filename[filenameLength + 1];
-    strncpy(filename, filenameStart, filenameLength);
-    filename[filenameLength] = '\0';
-
     // Parse the Content-Length header to determine the size of the request body.
-    char *content_length_str = strstr(buffer, "Content-Length: ") + 16;
+    char* content_length_str = strstr(buffer, "Content-Length: ") + 16;
     long content_length = atoi(strstr(content_length_str, "\r\n") ? content_length_str : strstr(content_length_str, "\n"));
-    content_length = content_length - sizeof(form);
-    free(form);
     
+    // Check if file is within file size limit
+    if (content_length >= FILESIZEMAX) {
+        foured(403, web_dir, sock, buffer);
+        exit(0);
+    }
+
+    // TODO: Repeats the last 6 letters of the filename as an 'extension', probably why the 303 is broken atm too
     // Create a random file name for the uploaded file in the data directory.
-    char *ext = strrchr(filename, '.');
+    char* filename = startend(data, "filename=\"", "\"");
+    char* ext = strrchr(filename, '.');
     if (ext == NULL) {
         ext = ".txt";
     }
-    
+    free(filename);
+
     char filepath[2048];
-    char *s = malloc(17);
+    char* s = malloc(17);
     int fileExist;
     while (1) {
         snprintf(filepath, 2048, "%s/data/%s%s", web_dir, randString(web_dir, s, 16), ext);
         
         // Check if requested filename exists. 
-        // TODO: create hash table of all file names to check against
         int fd;
         if ((fd = open(filepath, O_RDONLY)) == -1) {
             fileExist = 0;
@@ -313,38 +330,56 @@ void handlePOST(char *buffer, int *sock, char *web_dir) {
     int file;
     if ((file = open(filepath, O_RDWR | O_CREAT, 0644)) == -1) {
         perror("Error initialising file to write to.");
+        foured(500, web_dir, sock, buffer);
         exit(-1);
     }
-    printf("\nnew filepath: %s\n", filepath);
+    printf("\nnew filepath: %s, filesize: %ld bytes\n", filepath, content_length);
     
+    // TODO: Currently doesn't work
     // Write the request body from the buffer.
     if(write(file, data, sizeof(data)) == -1) {
         perror("Something went wrong writing initial buffer to file.");
+        foured(500, web_dir, sock, buffer);
         exit(-1);
     }
     free(data);
     
     // Write any more data that isn't in the buffer.
     sendFile(&file, buffer, sock, &content_length);
-    
+
+    // TODO: currently doesn't work
+    // Remove multipart section end
+    char* boundary = startend(buffer, "boundary=", "\n");
+    int sectionEnd = sizeof(boundary) + 2;
+    lseek(file, content_length - sectionEnd, SEEK_SET);
+    if((ftruncate(file, content_length - sectionEnd)) == -1){
+        perror("Failed to truncate end section boundary");
+        foured(500, web_dir, sock, buffer);
+        exit(-1);
+    } 
+    free(boundary);
+    lseek(file, (off_t)0, SEEK_SET);
+
+    // To prevent content-length spoofing check written file size
+    off_t fileSize;
+    handleOpenFile(filepath, &file, &fileSize, &fileExist);
+    if(fileSize >= FILESIZEMAX){
+        foured(403, web_dir, sock, buffer);
+        exit(0);
+    }
+    close(file);
+
     // Send back a header.
     char Header[128];
-    sprintf(Header, "HTTP/1.0 200 OK\r\n"
-                    "Content-type: text/html\r\n"
-                    "Content-length: 100\r\n\r\n"
-                    "Your file is on this domain at %s", strstr(filepath, web_dir) + strlen(web_dir));
+    sprintf(Header, "HTTP/1.0 303 See Other\r\n"
+                    "Location: %s\r\n\r\n", strstr(filepath, web_dir) + strlen(web_dir));
     
     if(write(*sock, Header, strlen(Header)) == -1){
         perror("Something went wrong writing header.");
         exit(-1);
     }
-    printf("\nServer response:\n%s\n", Header);        
     
-    // Send back the uploaded file.
-    int fd;
-    off_t file_size;
-    handleOpenFile(filepath, &fd, &file_size, &fileExist);
-    sendFile(sock, buffer, &fd, &file_size);
+    printf("\nServer response:\n%s\n", Header);        
 }
 
 /*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
