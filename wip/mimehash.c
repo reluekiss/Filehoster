@@ -1,9 +1,11 @@
 #include <string.h>
 #include <ctype.h>
-#include "uthash.h"
-
+#include "hashtable.h"
+// TODO: I know that this is broken
 #define DEFAULT_MIME_TYPE "application/octet-stream"
-/** * Lowercase a string
+
+/*
+ * Lowercase a string
  */
 char *strlower(char *s) {
     for (char *p = s; *p != '\0'; p++) {
@@ -12,42 +14,30 @@ char *strlower(char *s) {
     return s;
 }
 
-/** * MIME type definition
- */
-typedef struct {
-    char *ext;
-    char *mime_type;
-    UT_hash_handle hh;
-} mime_type_hash;
-
-/** * Return a MIME type for a given filename
- */
-char *mime_type_get(char *filename)
-{
-    char *ext = strrchr(filename, '.');
-
-    if (ext == NULL) {
-        return DEFAULT_MIME_TYPE;
+// Define the hash function for strings
+int str_hash(void *data, int data_size, int bucket_count) {
+    unsigned long hash = 5381;
+    const char *s = data;
+    while (*s) {
+        hash = ((hash << 5) + hash) + tolower(*s++);
     }
-
-    ext++;
-
-    strlower(ext);
-    mime_type_hash *mime_type_hash = NULL;
-    HASH_FIND_STR(mime_type_hash, ext, mime_type_hash);
-
-    if (mime_type_hash == NULL) {
-        return DEFAULT_MIME_TYPE;
-    }
-
-    return mime_type_hash->mime_type;
+    return hash % bucket_count;
 }
 
-/** * Initialize the hash table with the MIME types
+/*
+ * MIME type definition
  */
-void mime_type_hash_init()
-{
-    mime_type_hash mime_types[] = {
+struct mime_type_hash {
+    char *ext;
+    char *mime_type;
+};
+
+/*
+ * Initialize the hash table with the MIME types, only needs to be called once at program beginning
+ * then kernel will remove any dangling pointers or memory when parent process dies
+ */
+void mime_type_hash_init() {
+    struct mime_type_hash mime_types[] = {
         { "html", "text/html" },
         { "htm", "text/html" },
         { "jpeg", "image/jpeg" },
@@ -59,26 +49,24 @@ void mime_type_hash_init()
         { "gif", "image/gif" },
         { "png", "image/png" },
     };
-
-    for (int i = 0; i < sizeof(mime_types) / sizeof(mime_types[0]); i++) {
-        mime_type_hash *mime_type_hash_entry = malloc(sizeof(mime_type_hash));
-        mime_type_hash_entry->mime_type = malloc(sizeof(mime_type_hash));
-        mime_type_hash_entry->ext = strdup(mime_types[i].ext);
-        mime_type_hash_entry->mime_type = strdup(mime_types[i].mime_type);
-        HASH_ADD_STR(mime_type_hash, ext, mime_type_hash_entry);
-    }
+    
+    struct hashtable *mime_types_ht = hashtable_create(10, str_hash);
+    hashtable_put(mime_types_ht, mime_type_hash, mime_types);
 }
 
-/** * Clean up the hash table
+/*
+ * Return a MIME type for a given filename
  */
-void mime_type_hash_cleanup()
-{
-    mime_type_hash *current_mime_type_hash, *tmp_mime_type_hash;
+char *mime_type_get(char *filename) {
+    char *ext = strrchr(filename, '.');
 
-    HASH_ITER(hh, mime_type_hash, current_mime_type_hash, tmp_mime_type_hash) {
-        HASH_DEL(mime_type_hash, current_mime_type_hash);
-        free(current_mime_type_hash->ext);
-        free(current_mime_type_hash->mime_type);
-        free(current_mime_type_hash);
+    if (ext == NULL) {
+        return DEFAULT_MIME_TYPE;
     }
+    ext++;
+    strlower(ext);
+    
+    char* mime_type = hashtable_get_bin(mime_types_ht, ext, strlen(ext));
+    return mime_type;
 }
+

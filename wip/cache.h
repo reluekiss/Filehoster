@@ -1,13 +1,19 @@
 #ifndef _WEBCACHE_H_
 #define _WEBCACHE_H_
+#include <time.h>
 
 // Individual hash table entry
 struct cache_entry {
     char *path;   // Endpoint path--key to the cache
     char *content_type;
     int content_length;
+    
+    int *md5; // ETag hash
+    int hits; // Number of accesses per hour
+    time_t last_accessed; // Last access time in seconds since the Unix epoch
+    
     void *content;
-
+    
     struct cache_entry *prev, *next; // Doubly-linked list
 };
 

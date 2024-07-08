@@ -54,6 +54,7 @@ int typeOfFile(char *filepath) {
  +               sent to us.  Make sure you NULL terminate your result.
  + 
  +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+// TODO: Add to general http parser
 void extractFileRequest(char *method, char *req, char *buff) {
     char* p = buff;
     char* end = strchr(p, '/'); // find the first slash
@@ -74,6 +75,7 @@ void extractFileRequest(char *method, char *req, char *buff) {
  + Open a file and handle size calculations.
  +
  ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+// TODO: Somehow integrate with cacheing??
 void handleOpenFile(const char *filepath, int *fileHandle, off_t *file_size, int *fileExist) {
     if ((*fileHandle = open(filepath, O_RDONLY)) == -1) {
         fprintf(stderr, "File does not exist: %s\n", filepath);
@@ -235,6 +237,7 @@ void handleGET(char *fileToSend, int sock, char *webDir, char *buff) {
         // Do nothing.
     }
 
+    // TODO: add to generalised 'foured' aka send stuff to client function
     int fileExist = 1;
     handleOpenFile(filepath, &fileHandle, &file_size, &fileExist);
     if(fileExist == 1){        
@@ -276,6 +279,7 @@ char* startend(char* data, char* start, char* end) {
 void handlePOST(char *buffer, int *sock, char *web_dir) {
     int i,j = 0;
     
+    // TODO: add to http parser
     // Parse the body of the request. 
     char *start = strstr(buffer, "\r\n\r\n") + 4;
     char *form = malloc(strlen(start) + 1);
@@ -368,7 +372,8 @@ void handlePOST(char *buffer, int *sock, char *web_dir) {
         exit(0);
     }
     close(file);
-
+    
+    // TODO: generalised foured function
     // Send back a header.
     char Header[128];
     sprintf(Header, "HTTP/1.0 303 See Other\r\n"
@@ -487,6 +492,7 @@ int main(int argc, char **argv) {
             
             printf("client request:\n %s\n", ref);
             
+            // TODO: http parser
             // Extract user requested file name.
             extractFileRequest(method, fileRequest, buff);
             if (strcmp(method, "GET") == 0) {
