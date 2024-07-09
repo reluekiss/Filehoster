@@ -31,9 +31,8 @@ struct cache_entry* lowest_hit_entry(struct cache *cache) {
         fast_ptr = fast_ptr->next->next;
         slow_ptr = slow_ptr->next;
 
-        if (fast_ptr == NULL || fast_ptr->next == NULL) {
+        if (fast_ptr == NULL || fast_ptr->next == NULL)
             break;
-        }
 
         if (slow_ptr->hits < lowest) {
             lowest = slow_ptr->hits;
@@ -91,30 +90,6 @@ void dllist_insert_head(struct cache *cache, struct cache_entry *ce) {
         cache->head = ce;
     }
 }
-
-/**
- * Move a cache entry to the head of the list
- * NOTE: Obsolete by using hit frequency with floyd cycle finding algorithm
- */
-/* void dllist_move_to_head(struct cache *cache, struct cache_entry *ce) {
-    if (ce != cache->head) {
-        if (ce == cache->tail) {
-            // We're the tail
-            cache->tail = ce->prev;
-            cache->tail->next = NULL;
-
-        } else {
-            // We're neither the head nor the tail
-            ce->prev->next = ce->next;
-            ce->next->prev = ce->prev;
-        }
-
-        ce->next = cache->head;
-        cache->head->prev = ce;
-        ce->prev = NULL;
-        cache->head = ce;
-    }
-} */
 
 /**
  * Removes an from the list and returns it
@@ -185,7 +160,6 @@ void cache_put(struct cache *cache, char *path, char *content_type, void *conten
  */
 struct cache_entry *cache_get(struct cache *cache, char *path) {
     struct cache_entry *ce = hashtable_get(cache->index, path);
-    //dllist_move_to_head(cache, ce);
     ce->hits++;
     return ce;
 }
