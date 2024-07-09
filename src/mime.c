@@ -1,7 +1,7 @@
 #include <string.h>
 #include <ctype.h>
 #include "hashtable.h"
-// TODO: I know that this is broken
+
 #define DEFAULT_MIME_TYPE "application/octet-stream"
 
 /*
@@ -36,7 +36,7 @@ struct mime_type_hash {
  * Initialize the hash table with the MIME types, only needs to be called once at program beginning
  * then kernel will remove any dangling pointers or memory when parent process dies
  */
-void mime_type_hash_init() {
+struct hashtable* mime_type_hash_init() {
     struct mime_type_hash mime_types[] = {
         { "html", "text/html" },
         { "htm", "text/html" },
@@ -51,14 +51,17 @@ void mime_type_hash_init() {
     };
     
     struct hashtable *mime_types_ht = hashtable_create(10, str_hash);
-    hashtable_put(mime_types_ht, mime_type_hash, mime_types);
+    for(int i = 0; i < 10; i++) {
+        hashtable_put(mime_types_ht, mime_types[i].ext, mime_types[i].mime_type);
+    }
+    return mime_types_ht;
 }
 
 /*
  * Return a MIME type for a given filename
  */
-char *mime_type_get(char *filename) {
-    char *ext = strrchr(filename, '.');
+char* mime_type_get(char *filename, struct hashtable *ht) {
+    char* ext = strrchr(filename, '.');
 
     if (ext == NULL) {
         return DEFAULT_MIME_TYPE;
@@ -66,7 +69,6 @@ char *mime_type_get(char *filename) {
     ext++;
     strlower(ext);
     
-    char* mime_type = hashtable_get_bin(mime_types_ht, ext, strlen(ext));
+    char* mime_type = hashtable_get(ht, ext);
     return mime_type;
 }
-

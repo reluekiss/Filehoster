@@ -61,8 +61,7 @@ struct foreach_callback_payload {
 /**
  * Change the entry count, maintain load metrics
  */
-void add_entry_count(struct hashtable *ht, int d)
-{
+void add_entry_count(struct hashtable *ht, int d) {
     ht->num_entries += d;
     ht->load = (float)ht->num_entries / ht->size;
 }
@@ -70,8 +69,7 @@ void add_entry_count(struct hashtable *ht, int d)
 /**
  * Default modulo hashing function
  */
-int default_hashf(void *data, int data_size, int bucket_count)
-{
+int default_hashf(void *data, int data_size, int bucket_count) {
     const int R = 31; // Small prime
     int h = 0;
     unsigned char *p = data;
@@ -86,8 +84,7 @@ int default_hashf(void *data, int data_size, int bucket_count)
 /**
  * Create a new hashtable
  */
-struct hashtable *hashtable_create(int size, int (*hashf)(void *, int, int))
-{
+struct hashtable *hashtable_create(int size, int (*hashf)(void *, int, int)) {
     if (size < 1) {
         size = DEFAULT_SIZE;
     }
@@ -116,8 +113,7 @@ struct hashtable *hashtable_create(int size, int (*hashf)(void *, int, int))
 /**
  * Free an htent
  */
-void htent_free(void *htent, void *arg)
-{
+void htent_free(void *htent, void *arg) {
 	(void)arg;
 
 	free(htent);
@@ -128,8 +124,7 @@ void htent_free(void *htent, void *arg)
  *
  * NOTE: does *not* free the data pointer
  */
-void hashtable_destroy(struct hashtable *ht)
-{
+void hashtable_destroy(struct hashtable *ht) {
     for (int i = 0; i < ht->size; i++) {
         struct llist *llist = ht->bucket[i];
 
@@ -143,16 +138,14 @@ void hashtable_destroy(struct hashtable *ht)
 /**
  * Put to hash table with a string key
  */
-void *hashtable_put(struct hashtable *ht, char *key, void *data)
-{
+void *hashtable_put(struct hashtable *ht, char *key, void *data) {
     return hashtable_put_bin(ht, key, strlen(key), data);
 }
 
 /**
  * Put to hash table with a binary key
  */
-void *hashtable_put_bin(struct hashtable *ht, void *key, int key_size, void *data)
-{
+void *hashtable_put_bin(struct hashtable *ht, void *key, int key_size, void *data) {
     int index = ht->hashf(key, key_size, ht->size);
 
     struct llist *llist = ht->bucket[index];
@@ -178,8 +171,7 @@ void *hashtable_put_bin(struct hashtable *ht, void *key, int key_size, void *dat
 /**
  * Comparison function for hashtable entries
  */
-int htcmp(void *a, void *b)
-{
+int htcmp(void *a, void *b) {
     struct htent *entA = a, *entB = b;
 
     int size_diff = entB->key_size - entA->key_size;
@@ -194,16 +186,14 @@ int htcmp(void *a, void *b)
 /**
  * Get from the hash table with a string key
  */
-void *hashtable_get(struct hashtable *ht, char *key)
-{
+void *hashtable_get(struct hashtable *ht, char *key) {
     return hashtable_get_bin(ht, key, strlen(key));
 }
 
 /**
  * Get from the hash table with a binary data key
  */
-void *hashtable_get_bin(struct hashtable *ht, void *key, int key_size)
-{
+void *hashtable_get_bin(struct hashtable *ht, void *key, int key_size) {
     int index = ht->hashf(key, key_size, ht->size);
 
     struct llist *llist = ht->bucket[index];
@@ -222,8 +212,7 @@ void *hashtable_get_bin(struct hashtable *ht, void *key, int key_size)
 /**
  * Delete from the hashtable by string key
  */
-void *hashtable_delete(struct hashtable *ht, char *key)
-{
+void *hashtable_delete(struct hashtable *ht, char *key) {
     return hashtable_delete_bin(ht, key, strlen(key));
 }
 
@@ -232,8 +221,7 @@ void *hashtable_delete(struct hashtable *ht, char *key)
  *
  * NOTE: does *not* free the data--just free's the hash table entry
  */
-void *hashtable_delete_bin(struct hashtable *ht, void *key, int key_size)
-{
+void *hashtable_delete_bin(struct hashtable *ht, void *key, int key_size) {
     int index = ht->hashf(key, key_size, ht->size);
 
     struct llist *llist = ht->bucket[index];
@@ -260,8 +248,7 @@ void *hashtable_delete_bin(struct hashtable *ht, void *key, int key_size)
 /**
  * Foreach callback function
  */
-void foreach_callback(void *vent, void *vpayload)
-{
+void foreach_callback(void *vent, void *vpayload) {
 	struct htent *ent = vent;
 	struct foreach_callback_payload *payload = vpayload;
 
@@ -273,8 +260,7 @@ void foreach_callback(void *vent, void *vpayload)
  *
  * Note: elements are returned in effectively random order.
  */
-void hashtable_foreach(struct hashtable *ht, void (*f)(void *, void *), void *arg)
-{
+void hashtable_foreach(struct hashtable *ht, void (*f)(void *, void *), void *arg) {
 	struct foreach_callback_payload payload;
 
 	payload.f = f;

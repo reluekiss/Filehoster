@@ -8,8 +8,7 @@
  * 
  * Buffer is not NUL-terminated.
  */
-struct file_data *file_load(char *filename)
-{
+struct file_data *file_load(char *filename) {
     char *buffer, *p;
     struct stat buf;
     int bytes_read, bytes_remaining, total_bytes = 0;
@@ -68,8 +67,7 @@ struct file_data *file_load(char *filename)
 /**
  * Frees memory allocated by file_load().
  */
-void file_free(struct file_data *filedata)
-{
+void file_free(struct file_data *filedata) {
     free(filedata->data);
     free(filedata);
 }

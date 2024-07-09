@@ -9,14 +9,13 @@
 #include <stdlib.h>
 #include <sys/wait.h>
 #include <netinet/in.h>
-#include <ctype.h>
 #include <sys/types.h>
 #include <dirent.h>
+#include "mime.h"
 
 #define ERROR_FILE    0
 #define REG_FILE      1
 #define DIRECTORY     2
-#define DEFAULT_MIME_TYPE "application/octet-stream"
 #define FILESIZEMAX 200000000
 #define MIN(x, y) ((x) < (y) ? (x) : (y))
 
@@ -125,6 +124,7 @@ void foured(int id, char* webDir, int* sock, char* buff) {
     char Header[1024];
     sprintf(filepath, "%s/a/%d.jpg", webDir, id);
     handleOpenFile(filepath, &fileHandle, &file_size, &fileExist);
+    char* mime = mime_type_get(filepath);
 
     // TODO: can make similar hashmap for this as to mime types.
     char *idnames[] = {
@@ -144,8 +144,8 @@ void foured(int id, char* webDir, int* sock, char* buff) {
     }
 
     sprintf(Header, "HTTP/1.1 %d %s\r\n"
-                    "Content-type: image/jpg\r\n"
-                    "Content-length: %ld\r\n\r\n", id, idnames[i], file_size);
+                    "Content-type: %s\r\n"
+                    "Content-length: %ld\r\n\r\n", id, idnames[i], mime, file_size);
     //Send header.
     if( write(*sock, Header, strlen(Header)) == -1){
         perror("Something went wrong writing header.");
@@ -158,40 +158,11 @@ void foured(int id, char* webDir, int* sock, char* buff) {
 
 /*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
  +
- + Return a MIME type for a given filename
- +
- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
-char *mime_type_get(char *filename) {
-    char *ext = strrchr(filename, '.')+1;
-    if (ext == NULL) {
-        return DEFAULT_MIME_TYPE;
-    }
-    
-    for (char *p = ext; *p != '\0'; p++) {
-        *p = tolower(*p);
-    }
-
-    // TODO: this is O(n) and it should be O(1) (Current attempt in wip/mimehash.c)
-
-    if (strcmp(ext, "html") == 0 || strcmp(ext, "htm") == 0) { return "text/html"; }
-    if (strcmp(ext, "jpeg") == 0 || strcmp(ext, "jpg") == 0) { return "image/jpg"; }
-    if (strcmp(ext, "css") == 0) { return "text/css"; }
-    if (strcmp(ext, "js") == 0) { return "application/javascript"; }
-    if (strcmp(ext, "json") == 0) { return "application/json"; }
-    if (strcmp(ext, "txt") == 0) { return "text/plain"; }
-    if (strcmp(ext, "gif") == 0) { return "image/gif"; }
-    if (strcmp(ext, "png") == 0) { return "image/png"; }
-
-    return DEFAULT_MIME_TYPE;
-}
-
-/*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
- +
  + Generate a random string for a file.
  +      - Don't forget to free() the generated string.
  +
  ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
-char* randString(char* webdir, char *s, int len) {
+char* randString(char *s, int len) {
     const char *chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     int i, n;
 
@@ -277,8 +248,6 @@ char* startend(char* data, char* start, char* end) {
  +
  ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
 void handlePOST(char *buffer, int *sock, char *web_dir) {
-    int i,j = 0;
-    
     // TODO: add to http parser
     // Parse the body of the request. 
     char *start = strstr(buffer, "\r\n\r\n") + 4;
@@ -287,10 +256,10 @@ void handlePOST(char *buffer, int *sock, char *web_dir) {
     form[strlen(start)] = '\0';
     
     start = strstr(form, "\r\n\r\n") + 4;
-    free(form);
     char *data = malloc(strlen(start) + 1);
     memmove(data, start, strlen(start));
     data[strlen(start)] = '\0';
+    free(form);
     
     // Parse the Content-Length header to determine the size of the request body.
     char* content_length_str = strstr(buffer, "Content-Length: ") + 16;
@@ -315,7 +284,7 @@ void handlePOST(char *buffer, int *sock, char *web_dir) {
     char* s = malloc(17);
     int fileExist;
     while (1) {
-        snprintf(filepath, 2048, "%s/data/%s%s", web_dir, randString(web_dir, s, 16), ext);
+        snprintf(filepath, 2048, "%s/data/%s%s", web_dir, randString(s, 16), ext);
         
         // Check if requested filename exists. 
         int fd;
@@ -492,6 +461,7 @@ int main(int argc, char **argv) {
             
             printf("client request:\n %s\n", ref);
             
+            mime_type_hash_init();
             // TODO: http parser
             // Extract user requested file name.
             extractFileRequest(method, fileRequest, buff);

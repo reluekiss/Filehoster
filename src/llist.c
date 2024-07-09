@@ -9,8 +9,7 @@ struct llist_node {
 /**
  * Allocate a new linked list
  */
-struct llist *llist_create(void)
-{
+struct llist *llist_create(void) {
 	return calloc(1, sizeof(struct llist));
 }
 
@@ -22,8 +21,7 @@ struct llist *llist_create(void)
  *
  * NOTE: does *not* deallocate the data in each node!!
  */
-void llist_destroy(struct llist *llist)
-{
+void llist_destroy(struct llist *llist) {
 	struct llist_node *n = llist->head, *next;
 
 	while (n != NULL) {
@@ -39,8 +37,7 @@ void llist_destroy(struct llist *llist)
 /**
  * Insert at the head of a linked list
  */
-void *llist_insert(struct llist *llist, void *data)
-{
+void *llist_insert(struct llist *llist, void *data) {
 	struct llist_node *n = calloc(1, sizeof *n);
 
 	if (n == NULL) {
@@ -59,8 +56,7 @@ void *llist_insert(struct llist *llist, void *data)
 /**
  * Append to the end of a list
  */
-void *llist_append(struct llist *llist, void *data)
-{
+void *llist_append(struct llist *llist, void *data) {
 	struct llist_node *tail = llist->head;
 
 	// If list is empty, just insert
@@ -89,8 +85,7 @@ void *llist_append(struct llist *llist, void *data)
 /**
  * Return the first element in a list
  */
-void *llist_head(struct llist *llist)
-{
+void *llist_head(struct llist *llist) {
 	if (llist->head == NULL) {
 		return NULL;
 	}
@@ -101,8 +96,7 @@ void *llist_head(struct llist *llist)
 /**
  * Return the last element in a list
  */
-void *llist_tail(struct llist *llist)
-{
+void *llist_tail(struct llist *llist) {
 	struct llist_node *n = llist->head;
 
 	if (n == NULL) {
@@ -121,8 +115,7 @@ void *llist_tail(struct llist *llist)
  *
  * cmpfn should return 0 if the comparison to this node's data is equal.
  */
-void *llist_find(struct llist *llist, void *data, int (*cmpfn)(void *, void *))
-{
+void *llist_find(struct llist *llist, void *data, int (*cmpfn)(void *, void *)) {
 	struct llist_node *n = llist->head;
 
 	if (n == NULL) {
@@ -151,8 +144,7 @@ void *llist_find(struct llist *llist, void *data, int (*cmpfn)(void *, void *))
  *
  * NOTE: does *not* free the data--it merely returns a pointer to it
  */
-void *llist_delete(struct llist *llist, void *data, int (*cmpfn)(void *, void *))
-{
+void *llist_delete(struct llist *llist, void *data, int (*cmpfn)(void *, void *)) {
 	struct llist_node *n = llist->head, *prev = NULL;
 
 	while (n != NULL) {
@@ -186,16 +178,14 @@ void *llist_delete(struct llist *llist, void *data, int (*cmpfn)(void *, void *)
 /**
  * Return the number of elements in the list
  */
-int llist_count(struct llist *llist)
-{
+int llist_count(struct llist *llist) {
 	return llist->count;
 }
 
 /**
  * For each item in the list run a function
  */
-void llist_foreach(struct llist *llist, void (*f)(void *, void *), void *arg)
-{
+void llist_foreach(struct llist *llist, void (*f)(void *, void *), void *arg) {
 	struct llist_node *p = llist->head, *next;
 
 	while (p != NULL) {
@@ -212,8 +202,7 @@ void llist_foreach(struct llist *llist, void (*f)(void *, void *), void *arg)
  * NOTE: This is a read-only array! Consider it an array view onto the linked
  * list.
  */
-void **llist_array_get(struct llist *llist)
-{
+void **llist_array_get(struct llist *llist) {
 	if (llist->head == NULL) {
 		return NULL;
 	}
@@ -237,7 +226,6 @@ void **llist_array_get(struct llist *llist)
  * 
  * NOTE: this does not modify the linked list or its data in any way.
  */
-void llist_array_free(void **a)
-{
+void llist_array_free(void **a) {
 	free(a);
 }

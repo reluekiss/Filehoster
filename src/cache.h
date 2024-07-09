@@ -1,6 +1,5 @@
 #ifndef _WEBCACHE_H_
 #define _WEBCACHE_H_
-#include <time.h>
 
 // Individual hash table entry
 struct cache_entry {
@@ -8,9 +7,8 @@ struct cache_entry {
     char *content_type;
     int content_length;
     
-    int *md5; // ETag hash
+    void *md5; // File hash for ETag
     int hits; // Number of accesses per hour
-    time_t last_accessed; // Last access time in seconds since the Unix epoch
     
     void *content;
     
@@ -26,7 +24,6 @@ struct cache {
 };
 
 extern struct cache_entry *alloc_entry(char *path, char *content_type, void *content, int content_length);
-extern void free_entry(struct cache_entry *entry);
 extern struct cache *cache_create(int max_size, int hashsize);
 extern void cache_free(struct cache *cache);
 extern void cache_put(struct cache *cache, char *path, char *content_type, void *content, int content_length);
