@@ -23,7 +23,6 @@ void bytes2md5(const char *data, int len, char *md5buf) {
 
 // Find ce with lowest hit count
 struct cache_entry* lowest_hit_entry(struct cache *cache) {
-    int size = cache->cur_size;
     struct cache_entry *slow_ptr = cache->head, *fast_ptr = cache->head;
     int lowest = INT_MAX;
 
@@ -92,7 +91,7 @@ void dllist_insert_head(struct cache *cache, struct cache_entry *ce) {
 }
 
 /**
- * Removes an from the list and returns it
+ * Removes a cache entry from the list and frees it
  *
  */
 void dllist_remove_entry(struct cache *cache, struct cache_entry *ce) {
@@ -141,14 +140,15 @@ void cache_free(struct cache *cache) {
  * Store an entry in the cache
  *
  * This will also remove the least-recently-used items as necessary.
- * 
- * NOTE: doesn't check for duplicate cache entries
  */
 void cache_put(struct cache *cache, char *path, char *content_type, void *content, int content_length) {
     struct cache_entry *ce = alloc_entry(path, content_type, content, content_length);
     
+  //  if(cache_dupe(cache, ce) == 1)
+
     if(cache->cur_size >= cache->max_size)
         dllist_remove_entry(cache, lowest_hit_entry(cache));
+    
     dllist_insert_head(cache, ce);
     hashtable_put(cache->index, path, ce);
     
