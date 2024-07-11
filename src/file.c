@@ -1,18 +1,18 @@
+#include "file.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
-#include "file.h"
 
 /**
  * Loads a file into memory and returns a pointer to the data.
- * 
+ *
  * Buffer is not NUL-terminated.
  */
 struct file_data *file_load(char *filename)
 {
-	char *buffer, *p;
+	char	   *buffer, *p;
 	struct stat buf;
-	int bytes_read, bytes_remaining, total_bytes = 0;
+	int	    bytes_read, bytes_remaining, total_bytes = 0;
 
 	// Get the file size
 	if (stat(filename, &buf) == -1) {

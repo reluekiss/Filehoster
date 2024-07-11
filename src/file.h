@@ -2,7 +2,7 @@
 #define _FILELS_H_
 
 struct file_data {
-	int size;
+	int  size;
 	void *data;
 };
 

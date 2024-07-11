@@ -35,20 +35,20 @@ printf("%d %s\n", q->bar, q->baz); // 12 Hello
 
 */
 
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include "llist.h"
 #include "hashtable.h"
+#include "llist.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-#define DEFAULT_SIZE 128
-#define DEFAULT_GROW_FACTOR 2
+#define DEFAULT_SIZE		128
+#define DEFAULT_GROW_FACTOR	2
 
 // Hash table entry
 struct htent {
 	void *key;
-	int key_size;
-	int hashed_key;
+	int   key_size;
+	int   hashed_key;
 	void *data;
 };
 
@@ -72,8 +72,8 @@ void add_entry_count(struct hashtable *ht, int d)
  */
 int default_hashf(void *data, int data_size, int bucket_count)
 {
-	const int R = 31; // Small prime
-	int h = 0;
+	const int      R = 31; // Small prime
+	int	       h = 0;
 	unsigned char *p = data;
 
 	for (int i = 0; i < data_size; i++) {
@@ -101,11 +101,11 @@ struct hashtable *hashtable_create(int size, int (*hashf)(void *, int, int))
 	if (ht == NULL)
 		return NULL;
 
-	ht->size = size;
+	ht->size	= size;
 	ht->num_entries = 0;
-	ht->load = 0;
-	ht->bucket = malloc(size * sizeof(struct llist *));
-	ht->hashf = hashf;
+	ht->load	= 0;
+	ht->bucket	= malloc(size * sizeof(struct llist *));
+	ht->hashf	= hashf;
 
 	for (int i = 0; i < size; i++) {
 		ht->bucket[i] = llist_create();
@@ -160,11 +160,11 @@ void *hashtable_put_bin(struct hashtable *ht, void *key, int key_size,
 	struct llist *llist = ht->bucket[index];
 
 	struct htent *ent = malloc(sizeof *ent);
-	ent->key = malloc(key_size);
+	ent->key	  = malloc(key_size);
 	memcpy(ent->key, key, key_size);
-	ent->key_size = key_size;
+	ent->key_size	= key_size;
 	ent->hashed_key = index;
-	ent->data = data;
+	ent->data	= data;
 
 	if (llist_append(llist, ent) == NULL) {
 		free(ent->key);
@@ -211,7 +211,7 @@ void *hashtable_get_bin(struct hashtable *ht, void *key, int key_size)
 	struct llist *llist = ht->bucket[index];
 
 	struct htent cmpent;
-	cmpent.key = key;
+	cmpent.key	= key;
 	cmpent.key_size = key_size;
 
 	struct htent *n = llist_find(llist, &cmpent, htcmp);
@@ -243,7 +243,7 @@ void *hashtable_delete_bin(struct hashtable *ht, void *key, int key_size)
 	struct llist *llist = ht->bucket[index];
 
 	struct htent cmpent;
-	cmpent.key = key;
+	cmpent.key	= key;
 	cmpent.key_size = key_size;
 
 	struct htent *ent = llist_delete(llist, &cmpent, htcmp);
@@ -266,7 +266,7 @@ void *hashtable_delete_bin(struct hashtable *ht, void *key, int key_size)
  */
 void foreach_callback(void *vent, void *vpayload)
 {
-	struct htent *ent = vent;
+	struct htent			*ent	 = vent;
 	struct foreach_callback_payload *payload = vpayload;
 
 	payload->f(ent->data, payload->arg);
@@ -278,11 +278,11 @@ void foreach_callback(void *vent, void *vpayload)
  * Note: elements are returned in effectively random order.
  */
 void hashtable_foreach(struct hashtable *ht, void (*f)(void *, void *),
-		       void *arg)
+		       void		*arg)
 {
 	struct foreach_callback_payload payload;
 
-	payload.f = f;
+	payload.f   = f;
 	payload.arg = arg;
 
 	for (int i = 0; i < ht->size; i++) {
